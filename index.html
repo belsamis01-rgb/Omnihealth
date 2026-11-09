@@ -1,3 +1,8 @@
+<!-- ═══════════════════════════════════════════════════════════
+     OmniHealth © 2026 Samy Mettidji — Tous droits réservés
+     Application propriétaire — Reproduction interdite sans autorisation
+     Développé pour Propcept Event / JAM Montrouge
+     ═══════════════════════════════════════════════════════════ -->
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -1019,6 +1024,148 @@ select.input-field {
 .settings-label { flex: 1; font-size: 0.9rem; font-weight: 600; color: var(--text); }
 .settings-arrow { color: var(--muted); font-size: 0.85rem; }
 </style>
+
+<!-- ══════════════════════════════════════════
+     SUPABASE — Authentification
+     ⚠️ Remplace les 2 valeurs ci-dessous par les tiennes
+        (Supabase > Project Settings > API)
+══════════════════════════════════════════ -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.47.10/dist/umd/supabase.min.js"></script>
+<script>
+// ── CONFIG SUPABASE ──────────────────────────────
+// 👉 Remplace ces 2 lignes avec tes vraies valeurs
+var OH_SUPABASE_URL = 'REMPLACE_PAR_TON_URL_SUPABASE';
+var OH_SUPABASE_KEY = 'REMPLACE_PAR_TA_CLE_ANON_SUPABASE';
+// ────────────────────────────────────────────────
+
+var _ohSupa = null;
+
+function ohInitSupabase() {
+  try {
+    if (typeof supabase === 'undefined' || typeof supabase.createClient === 'undefined') return false;
+    if (OH_SUPABASE_URL.indexOf('REMPLACE') !== -1) return false; // Pas encore configuré
+    _ohSupa = supabase.createClient(OH_SUPABASE_URL, OH_SUPABASE_KEY);
+    return true;
+  } catch(e) { return false; }
+}
+
+// ── Afficher écran login ──
+function ohShowLoginScreen() {
+  var el = document.getElementById('oh-login-screen');
+  if (el) el.style.display = 'flex';
+}
+function ohHideLoginScreen() {
+  var el = document.getElementById('oh-login-screen');
+  if (el) el.style.display = 'none';
+}
+
+// ── Switcher onglets ──
+function ohAuthTab(tab) {
+  var isMagic = tab === 'magic';
+  var tabMagic = document.getElementById('oh-tab-magic');
+  var tabPwd   = document.getElementById('oh-tab-pwd');
+  var panelMagic = document.getElementById('oh-panel-magic');
+  var panelPwd   = document.getElementById('oh-panel-pwd');
+  if (tabMagic) { tabMagic.style.background = isMagic ? '#00c896' : 'transparent'; tabMagic.style.color = isMagic ? '#fff' : '#9098b1'; }
+  if (tabPwd)   { tabPwd.style.background   = isMagic ? 'transparent' : '#1a1d2e'; tabPwd.style.color   = isMagic ? '#9098b1' : '#fff'; }
+  if (panelMagic) panelMagic.style.display = isMagic ? 'block' : 'none';
+  if (panelPwd)   panelPwd.style.display   = isMagic ? 'none'  : 'block';
+}
+
+// ── Magic Link ──
+function ohSendMagicLink() {
+  if (!_ohSupa) { ohToast('Supabase non configuré'); return; }
+  var emailEl = document.getElementById('oh-auth-email-magic');
+  var email = emailEl ? emailEl.value.trim() : '';
+  if (!email || email.indexOf('@') === -1) { ohShowAuthError('Entre une adresse email valide'); return; }
+  _ohSupa.auth.signInWithOtp({ email: email, options: { emailRedirectTo: window.location.href } })
+    .then(function(res) {
+      if (res.error) { ohShowAuthError(res.error.message); }
+      else {
+        var sent = document.getElementById('oh-magic-sent');
+        if (sent) sent.style.display = 'block';
+      }
+    });
+}
+
+// ── Email + Password ──
+function ohSignInWithPassword() {
+  if (!_ohSupa) { ohToast('Supabase non configuré'); return; }
+  var email = (document.getElementById('oh-auth-email-pwd') || {}).value || '';
+  var pwd   = (document.getElementById('oh-auth-pwd') || {}).value || '';
+  if (!email || !pwd) { ohShowAuthError('Email et mot de passe requis'); return; }
+  _ohSupa.auth.signInWithPassword({ email: email.trim(), password: pwd })
+    .then(function(res) {
+      if (res.error) { ohShowAuthError(res.error.message); }
+      else { ohHideLoginScreen(); ohOnboardingInit(); }
+    });
+}
+
+function ohSignUpWithPassword() {
+  if (!_ohSupa) { ohToast('Supabase non configuré'); return; }
+  var email = (document.getElementById('oh-auth-email-pwd') || {}).value || '';
+  var pwd   = (document.getElementById('oh-auth-pwd') || {}).value || '';
+  if (!email || !pwd) { ohShowAuthError('Email et mot de passe requis'); return; }
+  if (pwd.length < 6) { ohShowAuthError('Mot de passe trop court (6 caractères min)'); return; }
+  _ohSupa.auth.signUp({ email: email.trim(), password: pwd })
+    .then(function(res) {
+      if (res.error) { ohShowAuthError(res.error.message); }
+      else { ohShowAuthError('✅ Compte créé ! Vérifie ton email pour confirmer.'); }
+    });
+}
+
+function ohShowAuthError(msg) {
+  var el = document.getElementById('oh-auth-error');
+  if (el) { el.textContent = msg; el.style.display = 'block'; }
+}
+
+// ── Écouter les changements de session (magic link callback) ──
+function ohSupaWatchSession() {
+  if (!_ohSupa) return;
+  _ohSupa.auth.onAuthStateChange(function(event, session) {
+    if (event === 'SIGNED_IN' && session) {
+      ohHideLoginScreen();
+      ohOnboardingInit();
+    }
+    if (event === 'SIGNED_OUT') {
+      ohShowLoginScreen();
+    }
+  });
+}
+
+// ── Déconnexion (accessible depuis page Moi) ──
+function ohSupaSignOut() {
+  if (_ohSupa) {
+    _ohSupa.auth.signOut().then(function() {
+      ohShowLoginScreen();
+    });
+  }
+}
+
+// ── Initialisation principale avec Auth ──
+// Remplace ohOnboardingInit si Supabase est configuré
+var _ohOnboardingInitOriginal = null;
+
+function ohInitWithSupabase() {
+  var ready = ohInitSupabase();
+  if (!ready) {
+    // Supabase pas encore configuré — mode offline direct
+    if (typeof ohOnboardingInit === 'function') ohOnboardingInit();
+    return;
+  }
+  ohSupaWatchSession();
+  _ohSupa.auth.getSession().then(function(res) {
+    if (res.data && res.data.session) {
+      // Utilisateur connecté — démarrer l'app
+      ohHideLoginScreen();
+      if (typeof ohOnboardingInit === 'function') ohOnboardingInit();
+    } else {
+      // Pas de session — montrer l'écran de connexion
+      ohShowLoginScreen();
+    }
+  });
+}
+</script>
 </head>
 <body>
 
@@ -1028,6 +1175,96 @@ select.input-field {
 
 <!-- TOAST -->
 <div id="oh-toast" class="toast" role="alert"></div>
+
+<!-- ═══════════════════════════════════════════
+     ÉCRAN DE CONNEXION SUPABASE
+════════════════════════════════════════════ -->
+<div id="oh-login-screen" style="display:none;position:fixed;inset:0;z-index:500;
+  background:linear-gradient(160deg,#f0fdf9 0%,#e8f4fd 100%);
+  flex-direction:column;align-items:center;justify-content:center;padding:1.5rem">
+
+  <!-- Logo -->
+  <div style="text-align:center;margin-bottom:2rem">
+    <div style="font-size:3.5rem;margin-bottom:0.5rem">💚</div>
+    <div style="font-size:2rem;font-weight:900;color:#1a1d2e;letter-spacing:-0.03em">OmniHealth</div>
+    <div style="font-size:0.9rem;color:#9098b1;margin-top:0.3rem">Votre santé, votre vie</div>
+  </div>
+
+  <!-- Carte de connexion -->
+  <div style="background:#fff;border-radius:24px;padding:1.8rem 1.5rem;width:100%;max-width:420px;
+    box-shadow:0 8px 40px rgba(0,200,150,0.12);border:1px solid #e8ecf2">
+
+    <!-- Onglets magic link / password -->
+    <div style="display:flex;background:#f5f7fa;border-radius:12px;padding:3px;margin-bottom:1.5rem" id="oh-auth-tabs">
+      <button type="button" id="oh-tab-magic" onclick="ohAuthTab('magic')"
+        style="flex:1;padding:0.6rem;border:none;border-radius:10px;font-weight:700;font-size:0.9rem;
+        cursor:pointer;transition:all 0.2s;min-height:44px;background:#00c896;color:#fff">
+        ✉️ Lien magique
+      </button>
+      <button type="button" id="oh-tab-pwd" onclick="ohAuthTab('pwd')"
+        style="flex:1;padding:0.6rem;border:none;border-radius:10px;font-weight:700;font-size:0.9rem;
+        cursor:pointer;transition:all 0.2s;min-height:44px;background:transparent;color:#9098b1">
+        🔑 Mot de passe
+      </button>
+    </div>
+
+    <!-- Panneau magic link -->
+    <div id="oh-panel-magic">
+      <label style="font-size:0.85rem;font-weight:700;color:#4a5068;display:block;margin-bottom:0.4rem">
+        Adresse email
+      </label>
+      <input type="email" id="oh-auth-email-magic" placeholder="ton@email.com" autocomplete="email"
+        style="width:100%;padding:0.85rem 1rem;border:1.5px solid #e8ecf2;border-radius:14px;
+        font-size:0.95rem;color:#1a1d2e;outline:none;min-height:44px;margin-bottom:1rem"
+        onfocus="this.style.borderColor='#00c896'" onblur="this.style.borderColor='#e8ecf2'">
+      <button type="button" onclick="ohSendMagicLink()"
+        style="width:100%;padding:0.9rem;background:#00c896;border:none;border-radius:14px;
+        color:#fff;font-size:0.95rem;font-weight:800;cursor:pointer;min-height:44px;
+        box-shadow:0 4px 12px rgba(0,200,150,0.35)">
+        Envoyer le lien de connexion
+      </button>
+      <div id="oh-magic-sent" style="display:none;text-align:center;margin-top:1rem;
+        padding:0.8rem;background:#e8fdf6;border-radius:12px;color:#00a877;font-size:0.85rem;font-weight:600">
+        ✅ Lien envoyé ! Vérifie ta boîte mail.
+      </div>
+    </div>
+
+    <!-- Panneau email + mot de passe -->
+    <div id="oh-panel-pwd" style="display:none">
+      <label style="font-size:0.85rem;font-weight:700;color:#4a5068;display:block;margin-bottom:0.4rem">
+        Adresse email
+      </label>
+      <input type="email" id="oh-auth-email-pwd" placeholder="ton@email.com" autocomplete="email"
+        style="width:100%;padding:0.85rem 1rem;border:1.5px solid #e8ecf2;border-radius:14px;
+        font-size:0.95rem;color:#1a1d2e;outline:none;min-height:44px;margin-bottom:0.75rem"
+        onfocus="this.style.borderColor='#00c896'" onblur="this.style.borderColor='#e8ecf2'">
+      <label style="font-size:0.85rem;font-weight:700;color:#4a5068;display:block;margin-bottom:0.4rem">
+        Mot de passe
+      </label>
+      <input type="password" id="oh-auth-pwd" placeholder="••••••••" autocomplete="current-password"
+        style="width:100%;padding:0.85rem 1rem;border:1.5px solid #e8ecf2;border-radius:14px;
+        font-size:0.95rem;color:#1a1d2e;outline:none;min-height:44px;margin-bottom:1rem"
+        onfocus="this.style.borderColor='#00c896'" onblur="this.style.borderColor='#e8ecf2'">
+      <button type="button" onclick="ohSignInWithPassword()"
+        style="width:100%;padding:0.9rem;background:#1a1d2e;border:none;border-radius:14px;
+        color:#fff;font-size:0.95rem;font-weight:800;cursor:pointer;min-height:44px;margin-bottom:0.6rem">
+        Se connecter
+      </button>
+      <button type="button" onclick="ohSignUpWithPassword()"
+        style="width:100%;padding:0.9rem;background:#f5f7fa;border:none;border-radius:14px;
+        color:#1a1d2e;font-size:0.9rem;font-weight:700;cursor:pointer;min-height:44px">
+        Créer un compte
+      </button>
+    </div>
+
+    <div id="oh-auth-error" style="display:none;margin-top:0.8rem;padding:0.7rem;
+      background:#fff5f5;border-radius:10px;color:#ef4444;font-size:0.82rem;text-align:center"></div>
+  </div>
+
+  <div style="text-align:center;margin-top:1.5rem;font-size:0.75rem;color:#c0c7d8">
+    OmniHealth © 2026 · Usage privé
+  </div>
+</div>
 
 <!-- ═══════════════════════════════════════════
      ONBOARDING
@@ -3167,7 +3404,29 @@ function ohTodayRender() {
       {id:'diner',     icon:'🌙',  label:'Dîner',      color:'#3b82f6', bg:'#eff6ff'},
       {id:'encas',     icon:'🍎',  label:'En-cas',     color:'#ec4899', bg:'#fdf2f8'},
     ];
+
+    // Vérifier si hier a des repas pour le bouton "Répéter"
+    var yesterdayKey = (function() {
+      var y = new Date(); y.setDate(y.getDate() - 1);
+      return y.toISOString().split('T')[0];
+    })();
+    var yesterdayLog = null;
+    try {
+      var yRaw = localStorage.getItem('oh_today_' + yesterdayKey);
+      if (yRaw) yesterdayLog = JSON.parse(yRaw);
+    } catch(e2) {}
+    var hasYesterday = yesterdayLog && Object.keys(yesterdayLog).some(function(k) { return yesterdayLog[k] && yesterdayLog[k].length > 0; });
+
     var mealsHTML = '<div style="display:flex;flex-direction:column;gap:0.5rem">';
+    if (hasYesterday) {
+      mealsHTML += '<button type="button" onclick="ohRepeatYesterdayMeals()" '
+        + 'style="display:flex;align-items:center;justify-content:center;gap:0.5rem;'
+        + 'background:linear-gradient(135deg,#e8fdf6,#eff6ff);border:1.5px dashed #00c896;'
+        + 'border-radius:14px;padding:0.75rem 1rem;width:100%;color:#00c896;font-weight:700;'
+        + 'font-size:0.88rem;cursor:pointer;-webkit-tap-highlight-color:transparent;min-height:44px">'
+        + '<span style="font-size:1.1rem">🔄</span> Répéter les repas d\'hier'
+        + '</button>';
+    }
     for (var i = 0; i < meals.length; i++) {
       var m = meals[i];
       var items = (log && log[m.id]) ? log[m.id] : [];
@@ -3299,6 +3558,70 @@ function ohSetStress(val) {
   if (lbl) {
     var msgs = ['','Tres calme','Calme','Serein','Legerement tendu','Tendu','Assez stresse','Stresse','Tres stresse','Extremement stresse','Surmenage'];
     lbl.textContent = 'Niveau ' + val + '/10 — ' + (msgs[parseInt(val)] || '');
+  }
+}
+
+// ── Répéter le repas d'hier ──
+function ohRepeatYesterdayMeals() {
+  try {
+    var y = new Date(); y.setDate(y.getDate() - 1);
+    var yesterdayKey = y.toISOString().split('T')[0];
+    var yRaw = localStorage.getItem('oh_today_' + yesterdayKey);
+    if (!yRaw) { ohToast('Aucun repas enregistré hier'); return; }
+    var yLog = JSON.parse(yRaw);
+
+    // Vérifier s'il y a déjà des aliments aujourd'hui
+    var todayLog = ohGetTodayLog();
+    var todayHasFood = Object.keys(todayLog).some(function(k) { return todayLog[k] && todayLog[k].length > 0; });
+
+    if (todayHasFood) {
+      // Demander confirmation via toast + modal simple
+      var existing = document.getElementById('oh-repeat-modal');
+      if (existing) existing.remove();
+      var modal = document.createElement('div');
+      modal.id = 'oh-repeat-modal';
+      modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:300;'
+        + 'display:flex;align-items:flex-end;justify-content:center;';
+      modal.innerHTML = '<div style="background:#fff;border-radius:24px 24px 0 0;padding:1.5rem 1.3rem 2rem;'
+        + 'width:100%;max-width:540px;">'
+        + '<div style="width:40px;height:4px;background:#e8ecf0;border-radius:99px;margin:0 auto 1rem"></div>'
+        + '<div style="font-size:1rem;font-weight:800;color:#1a1d2e;text-align:center;margin-bottom:0.75rem">🔄 Répéter les repas d\'hier</div>'
+        + '<div style="font-size:0.85rem;color:#666;text-align:center;margin-bottom:1.2rem">Tu as déjà des aliments aujourd\'hui. Que veux-tu faire ?</div>'
+        + '<button type="button" id="oh-repeat-add" style="width:100%;padding:0.9rem;background:#00c896;border:none;border-radius:14px;color:#fff;font-size:0.95rem;font-weight:800;cursor:pointer;margin-bottom:0.6rem;min-height:44px">Ajouter en plus</button>'
+        + '<button type="button" id="oh-repeat-replace" style="width:100%;padding:0.9rem;background:#f5f7fa;border:none;border-radius:14px;color:#1a1d2e;font-size:0.9rem;font-weight:700;cursor:pointer;margin-bottom:0.6rem;min-height:44px">Remplacer tout</button>'
+        + '<button type="button" id="oh-repeat-cancel" style="width:100%;padding:0.9rem;background:#f5f7fa;border:none;border-radius:14px;color:#9098b1;font-size:0.9rem;font-weight:700;cursor:pointer;min-height:44px">Annuler</button>'
+        + '</div>';
+      document.body.appendChild(modal);
+
+      document.getElementById('oh-repeat-add').addEventListener('click', function() {
+        // Fusionner
+        var mergedLog = ohGetTodayLog();
+        var keys = Object.keys(yLog);
+        for (var i = 0; i < keys.length; i++) {
+          if (!mergedLog[keys[i]]) mergedLog[keys[i]] = [];
+          if (yLog[keys[i]]) mergedLog[keys[i]] = mergedLog[keys[i]].concat(yLog[keys[i]]);
+        }
+        localStorage.setItem('oh_today_' + ohTodayKey(), JSON.stringify(mergedLog));
+        modal.remove();
+        ohTodayRender();
+        ohToast('✅ Repas d\'hier ajoutés à ceux d\'aujourd\'hui !');
+      });
+      document.getElementById('oh-repeat-replace').addEventListener('click', function() {
+        localStorage.setItem('oh_today_' + ohTodayKey(), JSON.stringify(yLog));
+        modal.remove();
+        ohTodayRender();
+        ohToast('✅ Repas d\'hier copiés pour aujourd\'hui !');
+      });
+      document.getElementById('oh-repeat-cancel').addEventListener('click', function() { modal.remove(); });
+      modal.addEventListener('click', function(e) { if (e.target === modal) modal.remove(); });
+    } else {
+      // Pas de conflit — copier directement
+      localStorage.setItem('oh_today_' + ohTodayKey(), JSON.stringify(yLog));
+      ohTodayRender();
+      ohToast('✅ Repas d\'hier copiés pour aujourd\'hui !');
+    }
+  } catch(err) {
+    ohToast('Erreur lors de la copie des repas');
   }
 }
 
@@ -3595,7 +3918,61 @@ function ohToggleDefi(wk, idx) {
   if (pos === -1) data[wk].checked.push(idx);
   else data[wk].checked.splice(pos, 1);
   localStorage.setItem('oh_defi', JSON.stringify(data));
+  // Mise à jour du streak avec tolérance 1 jour manqué
+  ohUpdateStreakForgiving();
   ohDefisRender();
+}
+
+// Streak qui pardonne — 1 jour manqué par semaine ne brise pas la série
+function ohUpdateStreakForgiving() {
+  try {
+    var rawStreak = localStorage.getItem('oh_streak') || '{"current":0,"record":0,"lastActive":""}';
+    var streak = {};
+    try { streak = JSON.parse(rawStreak); } catch(e) { streak = {current:0, record:0, lastActive:''}; }
+
+    var today = new Date();
+    var todayStr = today.toISOString().split('T')[0];
+
+    // Récupérer la date de la dernière activité
+    var lastActive = streak.lastActive || '';
+
+    if (!lastActive) {
+      // Première fois
+      streak.current = 1;
+      streak.lastActive = todayStr;
+    } else if (lastActive === todayStr) {
+      // Déjà compté aujourd'hui, rien à faire
+      return;
+    } else {
+      // Calculer l'écart en jours
+      var last = new Date(lastActive);
+      var diffMs = today - last;
+      var diffDays = Math.round(diffMs / 86400000);
+
+      if (diffDays === 1) {
+        // Jour consécutif
+        streak.current = (streak.current || 0) + 1;
+      } else if (diffDays === 2) {
+        // 1 jour manqué — streak qui pardonne : on continue sans pénalité
+        streak.current = (streak.current || 0) + 1;
+        streak.forgiven = (streak.forgiven || 0) + 1;
+        ohToast('💪 Hier manqué — pas de souci, ta série continue !');
+      } else {
+        // 2+ jours manqués — streak réinitialisé
+        streak.current = 1;
+        streak.forgiven = 0;
+        if (diffDays > 2) ohToast('🔄 Nouvelle série ! Accroche-toi cette fois 💪');
+      }
+      streak.lastActive = todayStr;
+    }
+
+    // Mettre à jour le record
+    if ((streak.current || 0) > (streak.record || 0)) {
+      streak.record = streak.current;
+    }
+
+    localStorage.setItem('oh_streak', JSON.stringify(streak));
+  } catch(e2) {}
 }
 
 
@@ -3765,6 +4142,13 @@ function ohMoiRender() {
       +       '<div style="' + _LBL + '">Param&#232;tres</div>'
       +       '<span style="' + _ARR + '">&#8250;</span>'
       +     '</button>'
+      +     (_ohSupa ? (
+              '<button type="button" style="' + _BTN + '" onclick="ohSupaSignOut()">'
+      +       '<div style="' + _ICO + 'background:#fff3cd"><span>&#128275;</span></div>'
+      +       '<div style="' + _LBL + '">Se d&#233;connecter</div>'
+      +       '<span style="' + _ARR + '">&#8250;</span>'
+      +       '</button>'
+            ) : '')
       +     '<button type="button" style="' + _BTNLAST + '" onclick="ohResetApp()">'
       +       '<div style="' + _ICO + 'background:#fef2f2"><span>&#128260;</span></div>'
       +       '<div style="flex:1;font-size:0.88rem;font-weight:600;color:#ef4444">R&#233;initialiser l\'app</div>'
@@ -4329,10 +4713,38 @@ function ohInitDate() {
   if (dateEl) dateEl.textContent = now.toLocaleDateString('fr-FR', {weekday:'long', day:'numeric', month:'long'});
 }
 
+// ── PROTECTION DOMAINE ──
+// Empêche l'utilisation de l'app copiée sur un domaine non autorisé
+(function() {
+  var ALLOWED = [
+    'localhost',
+    '127.0.0.1',
+    'omnihealth.netlify.app',
+    'omnihealth-jam.netlify.app'
+  ];
+  var host = window.location.hostname.toLowerCase();
+  var ok = false;
+  for (var i = 0; i < ALLOWED.length; i++) {
+    if (host === ALLOWED[i] || host.indexOf('--' + ALLOWED[i]) !== -1) { ok = true; break; }
+  }
+  // Autoriser les previews Netlify (*.netlify.app pour ce projet)
+  if (!ok && /omnihealth[^.]*\.netlify\.app$/.test(host)) ok = true;
+  // Autoriser les fichiers locaux (file://)
+  if (!ok && window.location.protocol === 'file:') ok = true;
+  if (!ok) {
+    document.documentElement.innerHTML = '<body style="font-family:sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#f5f7fa;text-align:center;padding:2rem">'
+      + '<div><div style="font-size:3rem;margin-bottom:1rem">🔒</div>'
+      + '<h1 style="font-size:1.3rem;color:#1a1d2e;margin-bottom:0.5rem">Application non autorisée</h1>'
+      + '<p style="color:#666;font-size:0.9rem">OmniHealth © 2026 Samy Mettidji<br>Cette application est réservée à un usage privé.</p></div></body>';
+  }
+})();
+
 // ── DEMARRAGE ──
 document.addEventListener('DOMContentLoaded', function() {
   ohInitDate();
-  ohOnboardingInit();
+  // Si Supabase est configuré → vérification session avant onboarding
+  // Sinon → mode offline direct (aucune interruption)
+  ohInitWithSupabase();
 });
 
 // ════════════════════════════════════════════════════════════
