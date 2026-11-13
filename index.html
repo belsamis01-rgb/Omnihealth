@@ -2351,6 +2351,7 @@ function ohFoodByName(name) {
   for (var i = 0; i < OH_FOODS.length; i++) {
     if (OH_FOODS[i].n === name) return OH_FOODS[i];
   }
+  if (typeof _ohOnlineMap !== 'undefined' && _ohOnlineMap[name]) return _ohOnlineMap[name];
   return null;
 }
 
@@ -2738,6 +2739,7 @@ function ohJournalTabSearch() {
     }
     html += '</div>';
   }
+  if (typeof ohFoodOnlineBlock === 'function') html += ohFoodOnlineBlock();
   return html;
 }
 
@@ -2795,6 +2797,7 @@ function ohJournalRefreshRow(btn, foodName) {
 function ohJournalSelectFood(foodName) {
   _ohJournalFood = ohFoodByName(foodName);
   if (!_ohJournalFood) return;
+  if (typeof ohFoodKeepOnline === 'function') ohFoodKeepOnline(_ohJournalFood);
   _ohJournalQty = 100;
   ohJournalBuildQtyPicker();
 }
@@ -3274,9 +3277,10 @@ function ohTodayRender() {
       else if (_jam >= 2) _f = Math.max(_f, 1.375);
       tdeeVal = Math.round(_bmr * _f);
     }
-    var kcalBrulee  = tdeeVal;
+    var sportJour = (typeof ohSportDay === 'function') ? ohSportDay(musDateKey()) : { seances: 0, minutes: 0, kcal: 0 };
+    var kcalBrulee  = tdeeVal + sportJour.kcal;
     var kcalMangee  = tot.kcal;
-    var kcalRestant = Math.max(0, goalKcal - kcalMangee);
+    var kcalRestant = Math.max(0, goalKcal + sportJour.kcal - kcalMangee);
 
     // ── Score santé (0–100) ──
     var pKcal  = goalKcal > 0 ? Math.min(tot.kcal / goalKcal, 1) : 0;
@@ -3532,6 +3536,7 @@ function ohTodayRender() {
     // ─── Assembler ───
     page.innerHTML = '<div style="padding:1rem 1rem 7rem">'
       + card1
+      + ((typeof ohSportTodayCard === 'function') ? ohSportTodayCard() : '')
       + card2
       + card3
       + card4
@@ -3915,7 +3920,8 @@ function ohDefisRender() {
       +     checked.length + '/' + defi.steps.length + ' &#233;tapes &middot; +' + defi.xp + ' XP'
       +   '</div>'
       +   stepsHTML
-      + '</div>';
+      + '</div>'
+      + ((typeof ohSportTrophiesCard === 'function') ? ohSportTrophiesCard() : '');
 
   } catch(err) {
     c.innerHTML = '<div style="text-align:center;padding:2rem;color:#666">Erreur: ' + (err.message || err) + '</div>';
@@ -5678,9 +5684,9 @@ function musSessionStats(s) {
 function musWeekStats() {
   var now = new Date(), dow = now.getDay() === 0 ? 6 : now.getDay() - 1;
   var lundi = musDateKey(new Date(now.getFullYear(), now.getMonth(), now.getDate() - dow));
-  var ss = musLoadSessions(), n = 0, series = 0, volume = 0;
-  for (var i = 0; i < ss.length; i++) if (ss[i].date >= lundi) { var st = musSessionStats(ss[i]); n++; series += st.series; volume += st.volume; }
-  return { n: n, series: series, volume: volume };
+  var ss = musLoadSessions(), n = 0, series = 0, volume = 0, kcal = 0;
+  for (var i = 0; i < ss.length; i++) if (ss[i].date >= lundi) { var st = musSessionStats(ss[i]); n++; series += st.series; volume += st.volume; kcal += musSessionKcal(ss[i]); }
+  return { n: n, series: series, volume: volume, kcal: kcal };
 }
 
 // ── Actions sur la séance ──
@@ -5714,7 +5720,10 @@ function musFinish() {
   }
   if (!exos.length) return false;
   var s = { id: cur.id, date: cur.date, debut: cur.debut, fin: Date.now(), lieu: cur.lieu || '', objectif: musObjById(cur.objectif) ? cur.objectif : '', programme: typeof cur.programme === 'string' ? cur.programme.slice(0, 120) : '', exos: exos };
+  s.minutes = musSessionMinutes(s); s.kcal = musKcalCalc(s);
+  musAwardsSync(); // rattrapage silencieux des trophées déjà acquis
   var all = musLoadSessions(); all.push(s); musSaveSessions(all); musSaveCurrent(null);
+  _mus.newAwards = musAwardsSync();
   return s;
 }
 
@@ -5814,8 +5823,8 @@ function musViewHome() {
     + musNavRow('prog', 'Programme', MUS_PROG[pp.id].nom) + '</div>';
   h += '<div class="mus-card"><div class="mus-card-title">Cette semaine</div><div class="mus-stats">'
     + '<div><div class="mus-stat-val">' + w.n + '</div><div class="mus-stat-lbl">séance' + (w.n > 1 ? 's' : '') + '</div></div>'
-    + '<div><div class="mus-stat-val">' + w.series + '</div><div class="mus-stat-lbl">série' + (w.series > 1 ? 's' : '') + '</div></div>'
-    + '<div><div class="mus-stat-val">' + musFmt(w.volume) + '</div><div class="mus-stat-lbl">kg soulevés</div></div></div></div>';
+    + '<div><div class="mus-stat-val">' + musFmt(w.volume) + '</div><div class="mus-stat-lbl">kg soulevés</div></div>'
+    + '<div><div class="mus-stat-val">' + musFmt(w.kcal) + '</div><div class="mus-stat-lbl">kcal dépensées</div></div></div></div>';
   return h;
 }
 function musSessionRow(s) {
@@ -5950,12 +5959,17 @@ function musViewHist() {
 }
 function musViewDetail(s) {
   var st = musSessionStats(s), h = '<div class="mus-lib-head"><button type="button" class="mus-link" data-a="detail-back">‹ Historique</button></div>';
-  if (_mus.flash === s.id) h += '<div class="mus-flash">Séance enregistrée. Bien joué !</div>';
+  if (_mus.flash === s.id) {
+    h += '<div class="mus-flash">Séance enregistrée. Bien joué !';
+    var na = _mus.newAwards || [];
+    for (var a = 0; a < na.length; a++) h += '<div class="mus-flash-award">' + na[a].ico + ' Trophée débloqué : ' + na[a].nom + '</div>';
+    h += '</div>';
+  }
   h += '<div class="mus-card"><div class="mus-card-title">' + musFmtDate(s.date) + (s.lieu ? ' · ' + musEsc(s.lieu) : '') + (musObjById(s.objectif) ? ' · ' + musObjById(s.objectif).nom : '') + '</div><div class="mus-stats">'
-    + '<div><div class="mus-stat-val">' + st.exos + '</div><div class="mus-stat-lbl">exercice' + (st.exos > 1 ? 's' : '') + '</div></div>'
     + '<div><div class="mus-stat-val">' + st.series + '</div><div class="mus-stat-lbl">série' + (st.series > 1 ? 's' : '') + '</div></div>'
     + '<div><div class="mus-stat-val">' + musFmt(st.volume) + '</div><div class="mus-stat-lbl">kg soulevés</div></div>'
-    + '<div><div class="mus-stat-val">' + (st.duree || '—') + '</div><div class="mus-stat-lbl">min</div></div></div>'
+    + '<div><div class="mus-stat-val">' + (st.duree || '—') + '</div><div class="mus-stat-lbl">min</div></div>'
+    + '<div><div class="mus-stat-val">' + musFmt(musSessionKcal(s)) + '</div><div class="mus-stat-lbl">kcal</div></div></div>'
     + (s.programme ? '<div class="mus-last" style="margin:10px 0 0">Programme : <strong>' + musEsc(s.programme) + '</strong></div>' : '') + '</div>';
   h += '<div class="mus-card">';
   for (var i = 0; i < s.exos.length; i++) h += '<div class="mus-perf"><span><span class="mus-dot" style="background:' + musGroupColor(s.exos[i].groupe) + '"></span> ' + musEsc(s.exos[i].nom) + '</span><span>' + musFmtSeries(s.exos[i].series) + '</span></div>';
@@ -6122,6 +6136,415 @@ function musAction(a, el) {
   else if (a === 'sess-del') { if (!need('sess-del')) return; musSaveSessions(musLoadSessions().filter(function(x){ return x.id !== v; })); _mus.detail = null; _mus.flash = null; }
   else return;
   ohMuscuRender();
+}
+
+
+// ══════════════════════════════════════════════════════════════
+// SPORT : calories dépensées, trophées, cartes Aujourd'hui et Défis
+// ══════════════════════════════════════════════════════════════
+// MET du Compendium des activités physiques 2024 : 3,5 (musculation, exercices multiples) ; 5,0 (circuit, effort modéré)
+var MUS_MET = { defaut: 3.5, circuit: 5.0 };
+function musPoidsCorps() {
+  var p = NaN; try { if (typeof OH_profile !== 'undefined' && OH_profile) p = musNum(OH_profile.poids); } catch(e) {}
+  return (p >= 30 && p <= 250) ? p : 70;
+}
+function musSessionMinutes(s) {
+  var st = musSessionStats(s), parSeries = Math.round(st.series * 2.5), d = st.duree;
+  if (!st.series) return 0;
+  if (!(d >= 5)) d = parSeries;                       // durée inconnue ou trop courte : estimation par série
+  return Math.max(0, Math.min(d, st.series * 6 + 10, 180)); // séance laissée ouverte : plafonnée
+}
+// Dépense nette (au-dessus du repos, déjà comptée dans la dépense quotidienne) = (MET − 1) × poids × heures
+function musKcalFor(met, minutes) { return Math.max(0, Math.round((met - 1) * musPoidsCorps() * minutes / 60)); }
+function musKcalCalc(s) { return musKcalFor(s.objectif === 'poids' ? MUS_MET.circuit : MUS_MET.defaut, musSessionMinutes(s)); }
+function musSessionKcal(s) { var k = musNum(s.kcal); return (isFinite(k) && k >= 0) ? Math.round(k) : musKcalCalc(s); }
+function musPdcHist() {
+  try { if (typeof pdcLoadHist === 'function') { var a = pdcLoadHist(); return Array.isArray(a) ? a.filter(function(e){ return e && Array.isArray(e.sets) && /^\d{4}-\d{2}-\d{2}$/.test(e.date || ''); }) : []; } } catch(e) {}
+  return [];
+}
+function musPdcMinutes(e) { return Math.min(e.sets.length * 3, 90); }
+// Toutes les séances de sport : journal Muscu + journal Para DC
+function musSportEvents() {
+  var out = [], ss = musLoadSessions(), i, k;
+  for (i = 0; i < ss.length; i++) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(ss[i].date || '')) continue;
+    var st = musSessionStats(ss[i]);
+    out.push({ date: ss[i].date, minutes: isFinite(musNum(ss[i].minutes)) ? musNum(ss[i].minutes) : musSessionMinutes(ss[i]), kcal: musSessionKcal(ss[i]), volume: st.volume, prog: !!ss[i].programme });
+  }
+  var pd = musPdcHist();
+  for (i = 0; i < pd.length; i++) {
+    var vol = 0; for (k = 0; k < pd[i].sets.length; k++) vol += (musNum(pd[i].sets[k].kg) || 0) * (musNum(pd[i].sets[k].reps) || 0);
+    var mn = musPdcMinutes(pd[i]);
+    out.push({ date: pd[i].date, minutes: mn, kcal: musKcalFor(MUS_MET.defaut, mn), volume: Math.round(vol), prog: false });
+  }
+  return out;
+}
+function ohSportDay(key) {
+  var ev = musSportEvents(), r = { seances: 0, minutes: 0, kcal: 0 };
+  for (var i = 0; i < ev.length; i++) if (ev[i].date === key) { r.seances++; r.minutes += ev[i].minutes; r.kcal += ev[i].kcal; }
+  r.minutes = Math.round(r.minutes); r.kcal = Math.round(r.kcal);
+  return r;
+}
+function musMonday(key) {
+  var p = key.split('-'), d = new Date(+p[0], +p[1]-1, +p[2]), dow = d.getDay() === 0 ? 6 : d.getDay() - 1;
+  return musDateKey(new Date(d.getFullYear(), d.getMonth(), d.getDate() - dow));
+}
+function musAddDays(key, n) { var p = key.split('-'); return musDateKey(new Date(+p[0], +p[1]-1, +p[2] + n)); }
+function musSportStats() {
+  var ev = musSportEvents(), st = { total: ev.length, volume: 0, maxWeek: 0, run: 0, prs: 0, prog: 0 }, weeks = {}, i;
+  for (i = 0; i < ev.length; i++) { st.volume += ev[i].volume; if (ev[i].prog) st.prog++; var m = musMonday(ev[i].date); weeks[m] = (weeks[m] || 0) + 1; }
+  var keys = Object.keys(weeks).sort(), run = 0;
+  for (i = 0; i < keys.length; i++) {
+    st.maxWeek = Math.max(st.maxWeek, weeks[keys[i]]);
+    run = (i > 0 && musAddDays(keys[i-1], 7) === keys[i]) ? run + 1 : 1;
+    st.run = Math.max(st.run, run);
+  }
+  // Records : une charge supérieure au meilleur précédent sur un même exercice
+  var ss = musLoadSessions().sort(function(a, b){ return (a.fin || 0) - (b.fin || 0); }), best = {};
+  for (i = 0; i < ss.length; i++) for (var j = 0; j < ss[i].exos.length; j++) {
+    var e = ss[i].exos[j]; if (!e || !e.id) continue;
+    var d = musDone(e.series), top = 0; for (var k = 0; k < d.length; k++) top = Math.max(top, musNum(d[k].kg) || 0);
+    if (!(top > 0)) continue;
+    if (best[e.id] > 0 && top > best[e.id]) st.prs++;
+    best[e.id] = Math.max(best[e.id] || 0, top);
+  }
+  return st;
+}
+var MUS_AWARDS = [
+  ['s1',  '🎉', 'Première séance',     'total', 1],
+  ['s5',  '🥉', '5 séances',           'total', 5],
+  ['s10', '🥈', '10 séances',          'total', 10],
+  ['s25', '🥇', '25 séances',          'total', 25],
+  ['s50', '🏆', '50 séances',          'total', 50],
+  ['w3',  '🔥', '3 séances en une semaine', 'maxWeek', 3],
+  ['r4',  '📅', '4 semaines d\'affilée',    'run', 4],
+  ['t1',  '🏋️', '1 tonne soulevée',    'volume', 1000],
+  ['t10', '💪', '10 tonnes soulevées', 'volume', 10000],
+  ['t100','🦾', '100 tonnes soulevées','volume', 100000],
+  ['pr',  '⭐', 'Record battu',        'prs', 1],
+  ['pg',  '🧭', 'Séance de programme', 'prog', 1]
+];
+function musAwards() {
+  var st = musSportStats();
+  return MUS_AWARDS.map(function(a){ var v = st[a[3]] || 0; return { id: a[0], ico: a[1], nom: a[2], val: Math.min(v, a[4]), cible: a[4], ok: v >= a[4] }; });
+}
+// Enregistre les trophées nouvellement acquis et les renvoie
+function musAwardsSync() {
+  var got = musGet('oh_sport_awards', {}); if (!got || typeof got !== 'object' || Array.isArray(got)) got = {};
+  var list = musAwards(), news = [];
+  for (var i = 0; i < list.length; i++) if (list[i].ok && !got[list[i].id]) { got[list[i].id] = musDateKey(); news.push(list[i]); }
+  if (news.length) musSet('oh_sport_awards', got);
+  return news;
+}
+function musNextAward(list) {
+  var best = null;
+  for (var i = 0; i < list.length; i++) if (!list[i].ok && (!best || list[i].val / list[i].cible > best.val / best.cible)) best = list[i];
+  return best;
+}
+function musFmtCible(a) { return a.cible >= 1000 ? musFmt(a.val / 1000) + ' / ' + musFmt(a.cible / 1000) + ' t' : a.val + ' / ' + a.cible; }
+
+// Carte « Sport » de la page Aujourd'hui
+function ohSportTodayCard() {
+  try {
+    var today = musDateKey(), d = ohSportDay(today), lundi = musMonday(today), ev = musSportEvents(), jours = {}, nSem = 0, i;
+    for (i = 0; i < ev.length; i++) if (ev[i].date >= lundi && ev[i].date <= musAddDays(lundi, 6)) { jours[ev[i].date] = 1; nSem++; }
+    var list = musAwards(), acquis = list.filter(function(a){ return a.ok; }), next = musNextAward(list), L = ['L','M','M','J','V','S','D'];
+    var h = '<div class="oh-today-card sp-card"><div class="oh-tc-header"><span class="oh-tc-icon">&#127947;&#65039;</span><span class="oh-tc-title">Sport</span>'
+      + '<span class="oh-tc-badge" style="background:var(--green)">' + nSem + ' cette semaine</span></div>';
+    h += '<div class="sp-today">' + (d.seances
+      ? '<strong>' + d.seances + ' séance' + (d.seances > 1 ? 's' : '') + '</strong> · ' + d.minutes + ' min · <strong>' + d.kcal + ' kcal</strong>'
+      : 'Pas encore de séance aujourd\'hui') + '</div><div class="sp-week">';
+    for (i = 0; i < 7; i++) { var k = musAddDays(lundi, i); h += '<div class="sp-day' + (jours[k] ? ' on' : '') + (k === today ? ' today' : '') + '">' + L[i] + '</div>'; }
+    h += '</div>';
+    if (acquis.length || next) {
+      h += '<div class="sp-troph">';
+      for (i = 0; i < acquis.length; i++) h += '<span title="' + acquis[i].nom + '">' + acquis[i].ico + '</span>';
+      if (next) h += '<div class="sp-next"><div>Prochain trophée : <strong>' + next.nom + '</strong> · ' + musFmtCible(next) + '</div>'
+        + '<div class="sp-bar"><i style="width:' + Math.round(next.val / next.cible * 100) + '%"></i></div></div>';
+      h += '</div>';
+    }
+    if (!d.seances) h += '<button type="button" class="sp-btn" onclick="ohSwitchPage(\'muscu\')">Démarrer une séance</button>';
+    return h + '</div>';
+  } catch(e) { return ''; }
+}
+// Carte « Trophées sport » de la page Défis
+function ohSportTrophiesCard() {
+  try {
+    var list = musAwards(), n = list.filter(function(a){ return a.ok; }).length;
+    var h = '<div class="mus-card animate-in sp-card" style="margin-top:14px"><div class="mus-card-title">&#127941; Trophées sport · ' + n + ' / ' + list.length + '</div><div class="sp-grid">';
+    for (var i = 0; i < list.length; i++) h += '<div class="sp-award' + (list[i].ok ? ' ok' : '') + '"><div class="sp-award-ico">' + list[i].ico + '</div>'
+      + '<div class="sp-award-nom">' + list[i].nom + '</div><div class="sp-award-val">' + (list[i].ok ? 'Débloqué' : musFmtCible(list[i])) + '</div></div>';
+    return h + '</div></div>';
+  } catch(e) { return ''; }
+}
+
+var OH_FOODS_EXTRA = [{"n": "Sandwich grec (kebab, pain)", "ico": "🥙", "cat": "fastfood", "kcal": 213, "prot": 11.0, "gluc": 22.0, "lip": 9.0, "k": "grecque doner döner kebap chawarma"},
+  {"n": "Kebab galette (dürüm)", "ico": "🌯", "cat": "fastfood", "kcal": 226, "prot": 12.0, "gluc": 22.0, "lip": 10.0, "k": "durum grec grecque wrap doner"},
+  {"n": "Kebab frites (barquette)", "ico": "🥙", "cat": "fastfood", "kcal": 240, "prot": 9.0, "gluc": 24.0, "lip": 12.0, "k": "grec grecque assiette"},
+  {"n": "Tacos français (1 viande)", "ico": "🌯", "cat": "fastfood", "kcal": 228, "prot": 10.0, "gluc": 20.0, "lip": 12.0, "k": "french tacos lyonnais"},
+  {"n": "Tacos français (2 viandes)", "ico": "🌯", "cat": "fastfood", "kcal": 241, "prot": 12.0, "gluc": 19.0, "lip": 13.0, "k": "french tacos lyonnais"},
+  {"n": "Panini jambon fromage", "ico": "🥪", "cat": "fastfood", "kcal": 258, "prot": 12.0, "gluc": 30.0, "lip": 10.0, "k": ""},
+  {"n": "Panini poulet", "ico": "🥪", "cat": "fastfood", "kcal": 240, "prot": 13.0, "gluc": 29.0, "lip": 8.0, "k": ""},
+  {"n": "Panini 3 fromages", "ico": "🥪", "cat": "fastfood", "kcal": 285, "prot": 12.0, "gluc": 30.0, "lip": 13.0, "k": "trois"},
+  {"n": "Sandwich jambon beurre", "ico": "🥖", "cat": "fastfood", "kcal": 266, "prot": 11.0, "gluc": 33.0, "lip": 10.0, "k": "parisien baguette"},
+  {"n": "Sandwich poulet crudités", "ico": "🥖", "cat": "fastfood", "kcal": 211, "prot": 11.0, "gluc": 26.0, "lip": 7.0, "k": "baguette"},
+  {"n": "Sandwich thon crudités", "ico": "🥖", "cat": "fastfood", "kcal": 216, "prot": 10.0, "gluc": 26.0, "lip": 8.0, "k": "baguette"},
+  {"n": "Sandwich merguez frites", "ico": "🥖", "cat": "fastfood", "kcal": 286, "prot": 10.0, "gluc": 30.0, "lip": 14.0, "k": ""},
+  {"n": "Sandwich américain (steak frites)", "ico": "🥖", "cat": "fastfood", "kcal": 277, "prot": 11.0, "gluc": 29.0, "lip": 13.0, "k": ""},
+  {"n": "Pan bagnat", "ico": "🥖", "cat": "fastfood", "kcal": 214, "prot": 9.0, "gluc": 22.0, "lip": 10.0, "k": ""},
+  {"n": "Wrap poulet crudités", "ico": "🌯", "cat": "fastfood", "kcal": 208, "prot": 11.0, "gluc": 23.0, "lip": 8.0, "k": ""},
+  {"n": "Bagel saumon fromage frais", "ico": "🥯", "cat": "fastfood", "kcal": 245, "prot": 11.0, "gluc": 30.0, "lip": 9.0, "k": ""},
+  {"n": "Burger maison (steak, cheddar)", "ico": "🍔", "cat": "fastfood", "kcal": 240, "prot": 13.0, "gluc": 20.0, "lip": 12.0, "k": "hamburger cheeseburger"},
+  {"n": "Tenders de poulet", "ico": "🍗", "cat": "fastfood", "kcal": 258, "prot": 17.0, "gluc": 16.0, "lip": 14.0, "k": ""},
+  {"n": "Poulet rôti (rôtisserie)", "ico": "🍗", "cat": "viande", "kcal": 213, "prot": 24.0, "gluc": 0.0, "lip": 13.0, "k": ""},
+  {"n": "Poulet braisé", "ico": "🍗", "cat": "viande", "kcal": 185, "prot": 25.0, "gluc": 1.0, "lip": 9.0, "k": ""},
+  {"n": "Bokit", "ico": "🥙", "cat": "fastfood", "kcal": 281, "prot": 9.0, "gluc": 32.0, "lip": 13.0, "k": "guadeloupe antilles"},
+  {"n": "Accras de morue", "ico": "🧆", "cat": "fastfood", "kcal": 254, "prot": 10.0, "gluc": 22.0, "lip": 14.0, "k": "antilles beignets"},
+  {"n": "Lasagnes bolognaise", "ico": "🍝", "cat": "prepare", "kcal": 143, "prot": 8.0, "gluc": 12.0, "lip": 7.0, "k": "lasagne"},
+  {"n": "Hachis parmentier", "ico": "🥘", "cat": "prepare", "kcal": 120, "prot": 6.5, "gluc": 10.0, "lip": 6.0, "k": ""},
+  {"n": "Gratin dauphinois", "ico": "🥔", "cat": "prepare", "kcal": 138, "prot": 3.5, "gluc": 13.0, "lip": 8.0, "k": ""},
+  {"n": "Gratin de pâtes", "ico": "🍝", "cat": "prepare", "kcal": 167, "prot": 7.0, "gluc": 19.0, "lip": 7.0, "k": ""},
+  {"n": "Quiche lorraine", "ico": "🥧", "cat": "prepare", "kcal": 270, "prot": 9.0, "gluc": 18.0, "lip": 18.0, "k": ""},
+  {"n": "Tarte aux légumes", "ico": "🥧", "cat": "prepare", "kcal": 195, "prot": 5.0, "gluc": 19.0, "lip": 11.0, "k": ""},
+  {"n": "Moussaka", "ico": "🍆", "cat": "prepare", "kcal": 133, "prot": 6.0, "gluc": 7.0, "lip": 9.0, "k": ""},
+  {"n": "Brandade de morue", "ico": "🐟", "cat": "prepare", "kcal": 144, "prot": 8.0, "gluc": 9.0, "lip": 8.5, "k": ""},
+  {"n": "Parmentier de poisson", "ico": "🐟", "cat": "prepare", "kcal": 111, "prot": 6.5, "gluc": 10.0, "lip": 5.0, "k": ""},
+  {"n": "Paella", "ico": "🥘", "cat": "prepare", "kcal": 149, "prot": 8.0, "gluc": 18.0, "lip": 5.0, "k": ""},
+  {"n": "Risotto aux champignons", "ico": "🍚", "cat": "prepare", "kcal": 140, "prot": 3.5, "gluc": 19.0, "lip": 5.5, "k": ""},
+  {"n": "Riz cantonais", "ico": "🍚", "cat": "prepare", "kcal": 165, "prot": 5.0, "gluc": 25.0, "lip": 5.0, "k": ""},
+  {"n": "Nouilles sautées au poulet", "ico": "🍜", "cat": "prepare", "kcal": 149, "prot": 7.0, "gluc": 19.0, "lip": 5.0, "k": ""},
+  {"n": "Pad thaï", "ico": "🍜", "cat": "prepare", "kcal": 170, "prot": 7.0, "gluc": 22.0, "lip": 6.0, "k": "thai"},
+  {"n": "Bo bun", "ico": "🍜", "cat": "prepare", "kcal": 120, "prot": 7.0, "gluc": 15.0, "lip": 3.5, "k": "bobun"},
+  {"n": "Ramen", "ico": "🍜", "cat": "prepare", "kcal": 96, "prot": 5.0, "gluc": 11.0, "lip": 3.5, "k": ""},
+  {"n": "Pho", "ico": "🍜", "cat": "prepare", "kcal": 60, "prot": 4.5, "gluc": 7.0, "lip": 1.5, "k": "soupe vietnamienne"},
+  {"n": "Nems au porc", "ico": "🥠", "cat": "prepare", "kcal": 245, "prot": 7.0, "gluc": 25.0, "lip": 13.0, "k": ""},
+  {"n": "Nems au poulet", "ico": "🥠", "cat": "prepare", "kcal": 227, "prot": 8.0, "gluc": 24.0, "lip": 11.0, "k": ""},
+  {"n": "Rouleau de printemps", "ico": "🥬", "cat": "prepare", "kcal": 114, "prot": 5.0, "gluc": 18.0, "lip": 2.5, "k": ""},
+  {"n": "Raviolis vapeur (gyoza)", "ico": "🥟", "cat": "prepare", "kcal": 178, "prot": 7.0, "gluc": 23.0, "lip": 6.5, "k": "gyozas"},
+  {"n": "Poulet au curry et riz", "ico": "🍛", "cat": "prepare", "kcal": 140, "prot": 8.0, "gluc": 17.0, "lip": 4.5, "k": ""},
+  {"n": "Poulet tikka masala et riz", "ico": "🍛", "cat": "prepare", "kcal": 150, "prot": 8.0, "gluc": 17.0, "lip": 5.5, "k": ""},
+  {"n": "Butter chicken et riz", "ico": "🍛", "cat": "prepare", "kcal": 152, "prot": 7.5, "gluc": 17.0, "lip": 6.0, "k": ""},
+  {"n": "Chili con carne", "ico": "🌶️", "cat": "prepare", "kcal": 113, "prot": 8.0, "gluc": 9.0, "lip": 5.0, "k": ""},
+  {"n": "Bœuf bourguignon", "ico": "🥩", "cat": "prepare", "kcal": 122, "prot": 13.0, "gluc": 4.0, "lip": 6.0, "k": "boeuf"},
+  {"n": "Blanquette de veau", "ico": "🥩", "cat": "prepare", "kcal": 123, "prot": 11.0, "gluc": 4.0, "lip": 7.0, "k": ""},
+  {"n": "Pot-au-feu", "ico": "🥩", "cat": "prepare", "kcal": 92, "prot": 9.0, "gluc": 5.0, "lip": 4.0, "k": ""},
+  {"n": "Poulet basquaise", "ico": "🍗", "cat": "prepare", "kcal": 105, "prot": 11.0, "gluc": 4.0, "lip": 5.0, "k": ""},
+  {"n": "Coq au vin", "ico": "🍗", "cat": "prepare", "kcal": 127, "prot": 13.0, "gluc": 3.0, "lip": 7.0, "k": ""},
+  {"n": "Petit salé aux lentilles", "ico": "🍲", "cat": "prepare", "kcal": 134, "prot": 9.0, "gluc": 11.0, "lip": 6.0, "k": ""},
+  {"n": "Saucisses lentilles", "ico": "🍲", "cat": "prepare", "kcal": 150, "prot": 8.5, "gluc": 11.0, "lip": 8.0, "k": ""},
+  {"n": "Cassoulet", "ico": "🍲", "cat": "prepare", "kcal": 148, "prot": 8.0, "gluc": 11.0, "lip": 8.0, "k": ""},
+  {"n": "Choucroute garnie", "ico": "🍲", "cat": "prepare", "kcal": 121, "prot": 6.0, "gluc": 4.0, "lip": 9.0, "k": ""},
+  {"n": "Tartiflette", "ico": "🧀", "cat": "prepare", "kcal": 175, "prot": 7.0, "gluc": 12.0, "lip": 11.0, "k": ""},
+  {"n": "Raclette (fromage, pommes de terre, charcuterie)", "ico": "🧀", "cat": "prepare", "kcal": 214, "prot": 11.0, "gluc": 11.0, "lip": 14.0, "k": ""},
+  {"n": "Fondue savoyarde (avec pain)", "ico": "🧀", "cat": "prepare", "kcal": 283, "prot": 15.0, "gluc": 22.0, "lip": 15.0, "k": ""},
+  {"n": "Aligot", "ico": "🥔", "cat": "prepare", "kcal": 179, "prot": 7.0, "gluc": 13.0, "lip": 11.0, "k": ""},
+  {"n": "Endives au jambon", "ico": "🥬", "cat": "prepare", "kcal": 104, "prot": 6.5, "gluc": 5.0, "lip": 6.5, "k": ""},
+  {"n": "Tomates farcies", "ico": "🍅", "cat": "prepare", "kcal": 124, "prot": 7.0, "gluc": 7.0, "lip": 7.5, "k": ""},
+  {"n": "Chou farci", "ico": "🥬", "cat": "prepare", "kcal": 112, "prot": 6.5, "gluc": 7.0, "lip": 6.5, "k": ""},
+  {"n": "Ratatouille", "ico": "🍆", "cat": "prepare", "kcal": 53, "prot": 1.0, "gluc": 6.0, "lip": 2.8, "k": ""},
+  {"n": "Purée de pommes de terre", "ico": "🥔", "cat": "prepare", "kcal": 96, "prot": 2.0, "gluc": 14.0, "lip": 3.5, "k": ""},
+  {"n": "Pommes de terre sautées", "ico": "🥔", "cat": "prepare", "kcal": 148, "prot": 2.5, "gluc": 20.0, "lip": 6.5, "k": ""},
+  {"n": "Poêlée de légumes", "ico": "🥦", "cat": "prepare", "kcal": 67, "prot": 2.0, "gluc": 8.0, "lip": 3.0, "k": ""},
+  {"n": "Pâtes carbonara", "ico": "🍝", "cat": "prepare", "kcal": 186, "prot": 7.5, "gluc": 22.0, "lip": 7.5, "k": "pates"},
+  {"n": "Pâtes bolognaise", "ico": "🍝", "cat": "prepare", "kcal": 132, "prot": 7.0, "gluc": 17.0, "lip": 4.0, "k": "pates spaghetti"},
+  {"n": "Pâtes au pesto", "ico": "🍝", "cat": "prepare", "kcal": 200, "prot": 6.0, "gluc": 26.0, "lip": 8.0, "k": "pates"},
+  {"n": "Pâtes au saumon", "ico": "🍝", "cat": "prepare", "kcal": 160, "prot": 7.5, "gluc": 19.0, "lip": 6.0, "k": "pates"},
+  {"n": "Raviolis sauce tomate", "ico": "🍝", "cat": "prepare", "kcal": 92, "prot": 3.5, "gluc": 14.0, "lip": 2.5, "k": ""},
+  {"n": "Gnocchis poêlés", "ico": "🥔", "cat": "prepare", "kcal": 171, "prot": 4.0, "gluc": 32.0, "lip": 3.0, "k": ""},
+  {"n": "Couscous royal", "ico": "🍲", "cat": "prepare", "kcal": 150, "prot": 9.0, "gluc": 15.0, "lip": 6.0, "k": ""},
+  {"n": "Couscous poulet légumes", "ico": "🍲", "cat": "prepare", "kcal": 122, "prot": 7.5, "gluc": 15.0, "lip": 3.5, "k": ""},
+  {"n": "Tajine poulet citron olives", "ico": "🍲", "cat": "prepare", "kcal": 122, "prot": 11.0, "gluc": 5.0, "lip": 6.5, "k": "tagine"},
+  {"n": "Tajine agneau pruneaux", "ico": "🍲", "cat": "prepare", "kcal": 178, "prot": 11.0, "gluc": 12.0, "lip": 9.5, "k": "tagine"},
+  {"n": "Tajine kefta aux œufs", "ico": "🍲", "cat": "prepare", "kcal": 150, "prot": 10.0, "gluc": 4.0, "lip": 10.5, "k": "tagine oeufs"},
+  {"n": "Salade César", "ico": "🥗", "cat": "prepare", "kcal": 150, "prot": 8.0, "gluc": 6.0, "lip": 10.5, "k": "cesar"},
+  {"n": "Salade niçoise", "ico": "🥗", "cat": "prepare", "kcal": 111, "prot": 7.0, "gluc": 5.0, "lip": 7.0, "k": ""},
+  {"n": "Salade de pâtes", "ico": "🥗", "cat": "prepare", "kcal": 161, "prot": 4.5, "gluc": 20.0, "lip": 7.0, "k": "pates"},
+  {"n": "Salade de riz au thon", "ico": "🥗", "cat": "prepare", "kcal": 141, "prot": 6.0, "gluc": 18.0, "lip": 5.0, "k": ""},
+  {"n": "Salade piémontaise", "ico": "🥗", "cat": "prepare", "kcal": 172, "prot": 4.0, "gluc": 12.0, "lip": 12.0, "k": ""},
+  {"n": "Taboulé", "ico": "🥗", "cat": "prepare", "kcal": 147, "prot": 3.5, "gluc": 22.0, "lip": 5.0, "k": ""},
+  {"n": "Céleri rémoulade", "ico": "🥗", "cat": "prepare", "kcal": 128, "prot": 1.0, "gluc": 5.0, "lip": 11.5, "k": ""},
+  {"n": "Poke bowl saumon", "ico": "🥗", "cat": "prepare", "kcal": 150, "prot": 8.0, "gluc": 17.0, "lip": 5.5, "k": ""},
+  {"n": "Buddha bowl", "ico": "🥗", "cat": "prepare", "kcal": 130, "prot": 5.0, "gluc": 15.0, "lip": 5.5, "k": ""},
+  {"n": "Soupe de légumes", "ico": "🥣", "cat": "prepare", "kcal": 33, "prot": 1.0, "gluc": 5.0, "lip": 1.0, "k": ""},
+  {"n": "Velouté de potiron", "ico": "🥣", "cat": "prepare", "kcal": 46, "prot": 1.0, "gluc": 6.0, "lip": 2.0, "k": ""},
+  {"n": "Soupe à l'oignon", "ico": "🥣", "cat": "prepare", "kcal": 46, "prot": 1.5, "gluc": 5.5, "lip": 2.0, "k": ""},
+  {"n": "Soupe miso", "ico": "🥣", "cat": "prepare", "kcal": 20, "prot": 1.5, "gluc": 2.0, "lip": 0.7, "k": ""},
+  {"n": "Chorba frik", "ico": "🥣", "cat": "cuisine", "kcal": 71, "prot": 4.5, "gluc": 8.0, "lip": 2.3, "k": "algérienne chorba"},
+  {"n": "Harira", "ico": "🥣", "cat": "cuisine", "kcal": 76, "prot": 4.5, "gluc": 10.0, "lip": 2.0, "k": ""},
+  {"n": "Bourek à la viande", "ico": "🥟", "cat": "cuisine", "kcal": 258, "prot": 10.0, "gluc": 22.0, "lip": 14.5, "k": "brick brik boureks"},
+  {"n": "Brick à l'œuf", "ico": "🥟", "cat": "cuisine", "kcal": 230, "prot": 9.0, "gluc": 17.0, "lip": 14.0, "k": "brik oeuf"},
+  {"n": "Chakchouka", "ico": "🍳", "cat": "cuisine", "kcal": 85, "prot": 4.0, "gluc": 6.0, "lip": 5.0, "k": "tchoutchouka shakshuka chakchouka"},
+  {"n": "Loubia (haricots blancs en sauce)", "ico": "🍲", "cat": "cuisine", "kcal": 108, "prot": 6.5, "gluc": 15.0, "lip": 2.5, "k": ""},
+  {"n": "Mtewem", "ico": "🍲", "cat": "cuisine", "kcal": 192, "prot": 12.0, "gluc": 8.0, "lip": 12.5, "k": "mtaouem"},
+  {"n": "Dolma (légumes farcis)", "ico": "🍆", "cat": "cuisine", "kcal": 118, "prot": 7.0, "gluc": 8.0, "lip": 6.5, "k": ""},
+  {"n": "Rechta au poulet", "ico": "🍜", "cat": "cuisine", "kcal": 148, "prot": 8.0, "gluc": 19.0, "lip": 4.5, "k": ""},
+  {"n": "Tlitli", "ico": "🍝", "cat": "cuisine", "kcal": 159, "prot": 8.5, "gluc": 20.0, "lip": 5.0, "k": ""},
+  {"n": "Chakhchoukha", "ico": "🍲", "cat": "cuisine", "kcal": 182, "prot": 8.0, "gluc": 24.0, "lip": 6.0, "k": ""},
+  {"n": "Mhadjeb", "ico": "🫓", "cat": "cuisine", "kcal": 229, "prot": 5.5, "gluc": 36.0, "lip": 7.0, "k": "mahjouba mahdjouba"},
+  {"n": "Garantita", "ico": "🥧", "cat": "cuisine", "kcal": 181, "prot": 8.0, "gluc": 17.0, "lip": 9.0, "k": "karantika karantita calentica"},
+  {"n": "Msemen", "ico": "🫓", "cat": "cuisine", "kcal": 328, "prot": 7.0, "gluc": 48.0, "lip": 12.0, "k": "msemmen crêpe feuilletée"},
+  {"n": "Baghrir", "ico": "🥞", "cat": "cuisine", "kcal": 188, "prot": 5.5, "gluc": 36.0, "lip": 2.5, "k": "crêpe mille trous"},
+  {"n": "Kesra (galette de semoule)", "ico": "🫓", "cat": "cuisine", "kcal": 288, "prot": 8.0, "gluc": 55.0, "lip": 4.0, "k": "khobz"},
+  {"n": "Matlouh (pain de semoule)", "ico": "🫓", "cat": "cuisine", "kcal": 246, "prot": 8.0, "gluc": 50.0, "lip": 1.5, "k": "matlou3"},
+  {"n": "Kefta grillée", "ico": "🥩", "cat": "viande", "kcal": 234, "prot": 17.0, "gluc": 2.0, "lip": 17.5, "k": ""},
+  {"n": "Brochette d'agneau", "ico": "🍢", "cat": "viande", "kcal": 218, "prot": 22.0, "gluc": 0.0, "lip": 14.5, "k": ""},
+  {"n": "Méchoui (agneau rôti)", "ico": "🥩", "cat": "viande", "kcal": 249, "prot": 24.0, "gluc": 0.0, "lip": 17.0, "k": "mechoui"},
+  {"n": "Makrout", "ico": "🍯", "cat": "sucre", "kcal": 398, "prot": 5.0, "gluc": 62.0, "lip": 14.5, "k": "makroud"},
+  {"n": "Zlabia", "ico": "🍯", "cat": "sucre", "kcal": 377, "prot": 3.0, "gluc": 62.0, "lip": 13.0, "k": "zalabia"},
+  {"n": "Kalb el louz", "ico": "🍯", "cat": "sucre", "kcal": 361, "prot": 6.0, "gluc": 55.0, "lip": 13.0, "k": "qalb"},
+  {"n": "Baklawa", "ico": "🍯", "cat": "sucre", "kcal": 430, "prot": 7.0, "gluc": 50.0, "lip": 22.5, "k": "baklava"},
+  {"n": "Corne de gazelle", "ico": "🍪", "cat": "sucre", "kcal": 420, "prot": 8.0, "gluc": 52.0, "lip": 20.0, "k": ""},
+  {"n": "Griwech", "ico": "🍯", "cat": "sucre", "kcal": 432, "prot": 6.0, "gluc": 58.0, "lip": 19.5, "k": "chebakia"},
+  {"n": "Thé à la menthe sucré", "ico": "🍵", "cat": "boisson", "kcal": 30, "prot": 0.0, "gluc": 7.5, "lip": 0.0, "k": "the"},
+  {"n": "Leben (lait fermenté)", "ico": "🥛", "cat": "laitage", "kcal": 40, "prot": 3.2, "gluc": 4.5, "lip": 1.0, "k": "lben petit lait"},
+  {"n": "Tiramisu", "ico": "🍰", "cat": "sucre", "kcal": 285, "prot": 5.0, "gluc": 28.0, "lip": 17.0, "k": ""},
+  {"n": "Fondant au chocolat", "ico": "🍫", "cat": "sucre", "kcal": 402, "prot": 6.0, "gluc": 45.0, "lip": 22.0, "k": "moelleux"},
+  {"n": "Tarte aux pommes", "ico": "🥧", "cat": "sucre", "kcal": 240, "prot": 2.5, "gluc": 34.0, "lip": 10.5, "k": ""},
+  {"n": "Flan pâtissier", "ico": "🍮", "cat": "sucre", "kcal": 216, "prot": 5.0, "gluc": 30.0, "lip": 8.5, "k": ""},
+  {"n": "Crème brûlée", "ico": "🍮", "cat": "sucre", "kcal": 278, "prot": 4.5, "gluc": 20.0, "lip": 20.0, "k": "creme brulee"},
+  {"n": "Mousse au chocolat", "ico": "🍫", "cat": "sucre", "kcal": 280, "prot": 6.0, "gluc": 27.0, "lip": 16.5, "k": ""},
+  {"n": "Île flottante", "ico": "🍮", "cat": "sucre", "kcal": 130, "prot": 4.5, "gluc": 20.0, "lip": 3.5, "k": "ile"},
+  {"n": "Éclair au chocolat", "ico": "🍫", "cat": "sucre", "kcal": 264, "prot": 6.0, "gluc": 33.0, "lip": 12.0, "k": "eclair"},
+  {"n": "Mille-feuille", "ico": "🍰", "cat": "sucre", "kcal": 333, "prot": 5.0, "gluc": 40.0, "lip": 17.0, "k": "millefeuille"},
+  {"n": "Paris-Brest", "ico": "🍰", "cat": "sucre", "kcal": 393, "prot": 7.0, "gluc": 35.0, "lip": 25.0, "k": ""},
+  {"n": "Crêpe au sucre", "ico": "🥞", "cat": "sucre", "kcal": 239, "prot": 6.0, "gluc": 38.0, "lip": 7.0, "k": "crepe"},
+  {"n": "Crêpe au Nutella", "ico": "🥞", "cat": "sucre", "kcal": 330, "prot": 6.0, "gluc": 45.0, "lip": 14.0, "k": "crepe"},
+  {"n": "Gaufre au sucre", "ico": "🧇", "cat": "sucre", "kcal": 321, "prot": 6.0, "gluc": 45.0, "lip": 13.0, "k": ""},
+  {"n": "Beignet", "ico": "🍩", "cat": "sucre", "kcal": 380, "prot": 6.0, "gluc": 45.0, "lip": 19.5, "k": ""},
+  {"n": "Churros", "ico": "🥨", "cat": "sucre", "kcal": 387, "prot": 4.5, "gluc": 45.0, "lip": 21.0, "k": "chichi"}];
+
+// ══════════════════════════════════════════════════════════════
+// BASE ALIMENTAIRE ÉTENDUE : plats courants, recherche tolérante, produits du commerce en ligne
+// ══════════════════════════════════════════════════════════════
+(function() {
+  // Ajout des plats supplémentaires (sans doublon de nom)
+  var deja = {}, i;
+  for (i = 0; i < OH_FOODS.length; i++) deja[OH_FOODS[i].n] = 1;
+  for (i = 0; i < OH_FOODS_EXTRA.length; i++) if (!deja[OH_FOODS_EXTRA[i].n]) { OH_FOODS.push(OH_FOODS_EXTRA[i]); deja[OH_FOODS_EXTRA[i].n] = 1; }
+  OH_FOOD_CATS.push({ id: 'commerce', lbl: 'Mes produits du commerce', ico: '🛒' });
+})();
+
+function ohFoodNorm(s) {
+  s = String(s == null ? '' : s).toLowerCase().replace(/œ/g, 'oe').replace(/æ/g, 'ae');
+  try { s = s.normalize('NFD').replace(/[̀-ͯ]/g, ''); } catch(e) {}
+  return s.replace(/[^a-z0-9]+/g, ' ').trim();
+}
+var OH_FOOD_STOP = { de:1, du:1, des:1, la:1, le:1, les:1, au:1, aux:1, a:1, et:1, en:1, d:1, l:1, un:1, une:1, avec:1 };
+function ohFoodTokens(q) {
+  var raw = ohFoodNorm(q).split(' '), out = [];
+  for (var i = 0; i < raw.length; i++) {
+    var t = raw[i]; if (!t || OH_FOOD_STOP[t]) continue;
+    if (t.length > 3) t = t.replace(/[sx]$/, '');   // pluriels simples
+    out.push(t);
+  }
+  return out;
+}
+// Recherche insensible aux accents et à l'ordre des mots, avec mots-clés (ex. « sandwich grec » → kebab)
+function ohFoodSearch(query, limit) {
+  var qn = ohFoodNorm(query); if (!qn) return [];
+  var toks = ohFoodTokens(query); if (!toks.length) toks = [qn];
+  var max = limit || 30, found = [];
+  for (var i = 0; i < OH_FOODS.length; i++) {
+    var f = OH_FOODS[i];
+    if (f._nn === undefined) { f._nn = ohFoodNorm(f.n); f._h = f._nn + ' ' + ohFoodNorm(f.k || ''); }
+    var inName = true, inAll = true;
+    for (var t = 0; t < toks.length; t++) {
+      if (f._nn.indexOf(toks[t]) === -1) { inName = false; if (f._h.indexOf(toks[t]) === -1) { inAll = false; break; } }
+    }
+    if (!inAll) continue;
+    var score = f._nn.indexOf(qn) === 0 ? 0 : inName ? ((' ' + f._nn).indexOf(' ' + toks[0]) !== -1 ? 1 : 2) : 3;
+    found.push({ f: f, s: score, i: i });
+  }
+  found.sort(function(a, b){ return a.s - b.s || a.i - b.i; });
+  return found.slice(0, max).map(function(x){ return x.f; });
+}
+
+// ── Produits du commerce (Open Food Facts) ──
+var _ohOnline = { q: '', status: 'idle', names: [], last: 0 };
+var _ohOnlineMap = {};
+function ohFoodCleanName(s) { return String(s == null ? '' : s).replace(/[<>"`\\&]/g, ' ').replace(/'/g, '’').replace(/\s+/g, ' ').trim().slice(0, 70); }
+function ohFoodNum(v) { var n = parseFloat(v); return (isFinite(n) && n >= 0 && n <= 100) ? Math.round(n * 10) / 10 : 0; }
+function ohFoodFromOFF(p) {
+  if (!p || typeof p !== 'object') return null;
+  var n = ohFoodCleanName(p.product_name_fr || p.product_name); if (n.length < 2) return null;
+  var nu = p.nutriments || {}, kcal = parseFloat(nu['energy-kcal_100g']);
+  if (!isFinite(kcal)) { var kj = parseFloat(nu['energy_100g']); if (isFinite(kj)) kcal = kj / 4.184; }
+  if (!isFinite(kcal) || kcal < 0 || kcal > 950) return null;
+  var b = ohFoodCleanName(String(p.brands || '').split(',')[0]);
+  if (b && ohFoodNorm(n).indexOf(ohFoodNorm(b)) === -1) n = (n + ' — ' + b).slice(0, 80);
+  return { n: n, ico: '🛒', cat: 'commerce', kcal: Math.round(kcal), prot: ohFoodNum(nu.proteins_100g), gluc: ohFoodNum(nu.carbohydrates_100g), lip: ohFoodNum(nu.fat_100g), src: 'off' };
+}
+function ohFoodValid(f) { return f && typeof f.n === 'string' && f.n.length >= 2 && isFinite(f.kcal) && f.kcal >= 0 && f.kcal <= 950; }
+// Un produit en ligne choisi par l'utilisateur est gardé dans la base locale
+function ohFoodKeepOnline(food) {
+  if (!food || food.src !== 'off') return;
+  for (var i = 0; i < OH_FOODS.length; i++) if (OH_FOODS[i].n === food.n) return;
+  OH_FOODS.push(food);
+  try {
+    var saved = JSON.parse(localStorage.getItem('oh_foods_online') || '[]'); if (!Array.isArray(saved)) saved = [];
+    saved.unshift({ n: food.n, ico: food.ico, cat: food.cat, kcal: food.kcal, prot: food.prot, gluc: food.gluc, lip: food.lip, src: 'off' });
+    localStorage.setItem('oh_foods_online', JSON.stringify(saved.slice(0, 200)));
+  } catch(e) {}
+}
+(function ohFoodLoadOnline() {
+  try {
+    var saved = JSON.parse(localStorage.getItem('oh_foods_online') || '[]'); if (!Array.isArray(saved)) return;
+    var deja = {}, i; for (i = 0; i < OH_FOODS.length; i++) deja[OH_FOODS[i].n] = 1;
+    for (i = 0; i < saved.length && i < 200; i++) {
+      var s = saved[i]; if (!ohFoodValid(s)) continue;
+      var f = { n: ohFoodCleanName(s.n), ico: '🛒', cat: 'commerce', kcal: Math.round(s.kcal), prot: ohFoodNum(s.prot), gluc: ohFoodNum(s.gluc), lip: ohFoodNum(s.lip), src: 'off' };
+      if (f.n.length >= 2 && !deja[f.n]) { OH_FOODS.push(f); deja[f.n] = 1; }
+    }
+  } catch(e) {}
+})();
+function ohFoodOnlineUrl(q) {
+  return 'https://world.openfoodfacts.org/cgi/search.pl?search_terms=' + encodeURIComponent(q)
+    + '&search_simple=1&action=process&json=1&page_size=20&tagtype_0=countries&tag_contains_0=contains&tag_0=france'
+    + '&fields=code,product_name,product_name_fr,brands,nutriments';
+}
+function ohFoodOnlineApply(q, json) {
+  var list = (json && Array.isArray(json.products)) ? json.products : [], names = [], vus = {};
+  for (var i = 0; i < list.length; i++) {
+    var f = ohFoodFromOFF(list[i]); if (!f || vus[f.n]) continue;
+    vus[f.n] = 1; _ohOnlineMap[f.n] = f; names.push(f.n);
+  }
+  _ohOnline.status = 'done'; _ohOnline.names = names;
+}
+function ohFoodOnlineSearch() {
+  var q = String(_ohJournalSearch || '').trim(); if (q.length < 3 || _ohOnline.status === 'loading') return;
+  var now = Date.now(); if (now - _ohOnline.last < 3000 && _ohOnline.q !== q) { if (typeof ohToast === 'function') ohToast('Patiente quelques secondes'); return; }
+  _ohOnline = { q: q, status: 'loading', names: [], last: now };
+  ohJournalDoSearch(_ohJournalSearch);
+  var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+  var timer = setTimeout(function(){ if (ctrl) ctrl.abort(); }, 12000);
+  var done = function() { clearTimeout(timer); if (String(_ohJournalSearch || '').trim() === q) ohJournalDoSearch(_ohJournalSearch); };
+  try {
+    fetch(ohFoodOnlineUrl(q), ctrl ? { signal: ctrl.signal } : {})
+      .then(function(r){ if (!r.ok) throw new Error('http'); return r.json(); })
+      .then(function(j){ if (_ohOnline.q === q) ohFoodOnlineApply(q, j); })
+      .catch(function(){ if (_ohOnline.q === q) _ohOnline.status = 'error'; })
+      .then(done);
+  } catch(e) { _ohOnline.status = 'error'; done(); }
+}
+// Bloc affiché sous les résultats locaux de la recherche du journal
+function ohFoodOnlineBlock() {
+  var q = String(_ohJournalSearch || '').trim(); if (q.length < 3) return '';
+  var qh = q.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  var h = '<div style="padding:0 0.75rem 1rem">';
+  if (_ohOnline.q !== q || _ohOnline.status === 'idle') {
+    h += '<button type="button" class="of-btn" onclick="ohFoodOnlineSearch()">🛒 Chercher « ' + qh + ' » dans les produits du commerce</button>';
+  } else if (_ohOnline.status === 'loading') {
+    h += '<div class="of-note">Recherche en cours…</div>';
+  } else if (_ohOnline.status === 'error') {
+    h += '<div class="of-note">Recherche en ligne indisponible pour l\'instant. Réessaie dans une minute.</div>'
+      + '<button type="button" class="of-btn" onclick="ohFoodOnlineSearch()">Réessayer</button>';
+  } else {
+    var rows = '', n = 0;
+    for (var i = 0; i < _ohOnline.names.length; i++) { var f = _ohOnlineMap[_ohOnline.names[i]]; if (f) { rows += ohJournalFoodRow(f); n++; } }
+    h += '<div class="of-title">Produits du commerce</div>' + (n ? rows : '<div class="of-note">Aucun produit trouvé pour cette recherche.</div>')
+      + '<div class="of-note">Données : Open Food Facts</div>';
+  }
+  return h + '</div>';
 }
 
 </script>
@@ -6501,6 +6924,37 @@ function musAction(a, el) {
   .mus-exo { padding: 10px; }
   .mus-step { flex-basis: 28px; }
   .mus-set-head, .mus-set { grid-template-columns: 16px 1fr 1fr 44px; gap: 4px; }
+}
+/* Sport : carte Aujourd'hui et trophées */
+.sp-today { font-size: 0.9rem; color: var(--text2); margin: 2px 0 10px; }
+.sp-today strong { color: var(--text); }
+.sp-week { display: flex; gap: 6px; margin-bottom: 10px; }
+.sp-day { flex: 1; height: 34px; border-radius: 10px; background: var(--bg); color: var(--muted); font-size: 0.72rem; font-weight: 800; display: flex; align-items: center; justify-content: center; }
+.sp-day.on { background: var(--green); color: #fff; }
+.sp-day.today { box-shadow: inset 0 0 0 2px var(--text); }
+.sp-troph { font-size: 1.3rem; line-height: 1.6; letter-spacing: 2px; }
+.sp-next { font-size: 0.76rem; letter-spacing: 0; color: var(--text2); margin-top: 4px; }
+.sp-next strong { color: var(--text); }
+.sp-bar { height: 6px; border-radius: 99px; background: var(--bg); margin-top: 5px; overflow: hidden; }
+.sp-bar i { display: block; height: 100%; background: var(--green); border-radius: 99px; }
+.sp-btn { display: block; width: 100%; min-height: 46px; margin-top: 12px; border: 0; border-radius: 12px; background: var(--green); color: #fff; font: 700 0.92rem var(--font); cursor: pointer; }
+.sp-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 10px; }
+.sp-award { background: var(--bg); border-radius: 12px; padding: 10px 4px; text-align: center; opacity: 0.55; }
+.sp-award.ok { opacity: 1; background: var(--green-light); }
+.sp-award-ico { font-size: 1.5rem; filter: grayscale(1); }
+.sp-award.ok .sp-award-ico { filter: none; }
+.sp-award-nom { font-size: 0.68rem; font-weight: 700; color: var(--text); line-height: 1.25; margin-top: 2px; }
+.sp-award-val { font-size: 0.64rem; color: var(--muted); font-weight: 600; margin-top: 2px; font-variant-numeric: tabular-nums; }
+.sp-award.ok .sp-award-nom { color: #06694f; }
+.sp-award.ok .sp-award-val { color: #06694f; }
+.mus-flash-award { margin-top: 6px; font-weight: 800; }
+/* Recherche d'aliments en ligne */
+.of-btn { display: block; width: 100%; min-height: 46px; margin: 10px 0 4px; border: 1.5px dashed #c9d1dc; border-radius: 14px; background: #fff; color: #1a1d2e; font: 700 0.84rem var(--font); cursor: pointer; padding: 6px 10px; }
+.of-note { text-align: center; font-size: 0.72rem; color: #9098b1; padding: 8px 4px; }
+.of-title { font-size: 0.72rem; font-weight: 800; color: #9098b1; text-transform: uppercase; letter-spacing: 0.06em; margin: 12px 2px 6px; }
+@media (prefers-color-scheme: dark) {
+  .sp-award.ok { background: rgba(0,200,150,0.16); }
+  .sp-award.ok .sp-award-nom, .sp-award.ok .sp-award-val { color: #7ff0cf; }
 }
 
 </style>
