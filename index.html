@@ -1584,6 +1584,10 @@ function ohInitWithSupabase() {
     <span class="nav-icon" aria-hidden="true">👤</span>
     <span>Moi</span>
   </button>
+  <button class="nav-item" onclick="ohSwitchPage('muscu')" role="tab" aria-selected="false" aria-controls="page-muscu" type="button">
+    <span class="nav-icon" aria-hidden="true">💪</span>
+    <span>Muscu</span>
+  </button>
   <button class="nav-item" onclick="ohSwitchPage('paradc')" role="tab" aria-selected="false" aria-controls="page-paradc" type="button">
     <span class="nav-icon" aria-hidden="true">🏋️</span>
     <span>Para DC</span>
@@ -1629,6 +1633,15 @@ function ohInitWithSupabase() {
   <div id="moi-content">
     <p style="text-align:center;color:var(--muted);padding:2rem 0;font-size:0.9rem">Chargement...</p>
   </div>
+</div>
+
+<!-- ── PAGE MUSCULATION ── -->
+<div class="page" id="page-muscu" role="tabpanel">
+  <div class="page-header">
+    <div class="page-header-title">Musculation</div>
+    <div class="page-header-sub">Ton journal de séances, dans n'importe quelle salle</div>
+  </div>
+  <div class="page-container" style="padding-top:1rem" id="mus-content"></div>
 </div>
 
 <!-- ── PAGE PARA DC ── -->
@@ -4625,7 +4638,7 @@ function ohSwitchPage(id) {
     }
   }
   window.scrollTo(0, 0);
-  var renders = { today: ohTodayRender, suivi: ohSuiviRender, defis: ohDefisRender, moi: ohMoiRender, paradc: ohParaDCRender };
+  var renders = { today: ohTodayRender, suivi: ohSuiviRender, defis: ohDefisRender, moi: ohMoiRender, paradc: ohParaDCRender, muscu: ohMuscuRender };
   if (renders[id]) setTimeout(renders[id], 30);
 }
 
@@ -5371,6 +5384,744 @@ function pdcLogSave() {
   alert('Séance enregistrée !');
 }
 
+
+// ══════════════════════════════════════════════════════════════
+// MODULE MUSCULATION — journal de séances + bibliothèque d'exercices
+// Préfixe : mus / MUS_ — stockage local : oh_muscu_*
+// ══════════════════════════════════════════════════════════════
+var MUS_GROUPS = [
+  ['pecs','Pectoraux','#f97316'], ['epaules','Épaules','#f59e0b'], ['trapezes','Trapèzes','#a78bfa'],
+  ['biceps','Biceps','#3b82f6'], ['triceps','Triceps','#06b6d4'], ['avantbras','Avant-bras','#64748b'],
+  ['dorsaux','Dorsaux','#00c896'], ['lombaires','Lombaires','#84cc16'], ['abdos','Abdominaux','#ec4899'],
+  ['jambes','Jambes','#8b5cf6'], ['fessiers','Fessiers','#d946ef'], ['mollets','Mollets','#14b8a6']
+];
+var MUS_EQUIP = { B:'Barre', H:'Haltères', M:'Machine', P:'Poulie', C:'Poids du corps', S:'Barre guidée', K:'Kettlebell', E:'Élastique' };
+var MUS_EQUIP_ORDER = ['B','H','M','P','S','C','K','E'];
+var MUS_LIEUX = ['JAM','Fitness Park','Basic-Fit','L\'Orange Bleue','Maison','Autre'];
+
+// Format : 'Équipement:Nom' — l'identifiant est dérivé du groupe et du nom
+var MUS_LIB = {
+  pecs: ['B:Développé couché barre','B:Développé incliné barre','B:Développé décliné barre','H:Développé couché haltères',
+    'H:Développé incliné haltères','H:Développé décliné haltères','S:Développé couché barre guidée','S:Développé incliné barre guidée',
+    'M:Développé assis machine','M:Développé incliné machine','M:Pec deck (butterfly)','H:Écarté couché haltères',
+    'H:Écarté incliné haltères','P:Écarté poulies vis-à-vis','P:Écarté poulies basses','P:Écarté poulies hautes',
+    'C:Pompes','C:Pompes inclinées (mains surélevées)','C:Dips buste penché','H:Pull-over haltère','E:Développé élastique'],
+  epaules: ['B:Développé militaire barre','H:Développé épaules haltères','H:Développé Arnold','M:Développé épaules machine',
+    'S:Développé épaules barre guidée','H:Élévations latérales haltères','P:Élévations latérales poulie','M:Élévations latérales machine',
+    'H:Élévations frontales haltères','P:Élévations frontales poulie','B:Élévations frontales barre','H:Oiseau haltères (buste penché)',
+    'M:Pec deck inversé (deltoïde postérieur)','P:Face pull','P:Oiseau poulies croisées','B:Tirage menton barre',
+    'P:Tirage menton poulie','E:Élévations latérales élastique','E:Rotation externe élastique','P:Rotation externe poulie','K:Développé épaules kettlebell'],
+  trapezes: ['B:Shrugs barre','H:Shrugs haltères','M:Shrugs machine','S:Shrugs barre guidée','P:Shrugs poulie basse',
+    'B:Tirage menton prise large','H:Farmer walk (marche du fermier)','B:Rowing barre coudes écartés','K:Shrugs kettlebell'],
+  biceps: ['B:Curl barre droite','B:Curl barre EZ','H:Curl haltères','H:Curl alterné haltères','H:Curl marteau',
+    'H:Curl incliné haltères','H:Curl concentré','B:Curl pupitre barre EZ','M:Curl pupitre machine','P:Curl poulie basse',
+    'P:Curl marteau corde','P:Curl poulies hautes vis-à-vis','H:Curl araignée (spider curl)','C:Tractions supination','E:Curl élastique','K:Curl kettlebell'],
+  triceps: ['P:Extension triceps poulie haute barre','P:Extension triceps corde','P:Extension triceps prise inversée','P:Extension au-dessus de la tête poulie',
+    'B:Barre au front','H:Barre au front haltères','H:Extension nuque haltère','H:Kickback haltère','B:Développé couché prise serrée',
+    'S:Développé prise serrée barre guidée','M:Dips machine','M:Extension triceps machine','C:Dips','C:Dips entre deux bancs',
+    'C:Pompes prise serrée (diamant)','E:Extension triceps élastique'],
+  avantbras: ['B:Curl poignets barre','H:Curl poignets haltères','B:Extension poignets barre','H:Extension poignets haltères',
+    'B:Curl inversé barre','P:Curl inversé poulie','H:Pronation-supination haltère','C:Suspension à la barre','H:Pince (tenue de disques)'],
+  dorsaux: ['C:Tractions pronation','C:Tractions prise neutre','M:Tractions assistées machine','P:Tirage vertical prise large',
+    'P:Tirage vertical prise serrée','P:Tirage vertical prise neutre','P:Tirage vertical nuque','P:Tirage horizontal poulie basse',
+    'P:Tirage horizontal prise large','B:Rowing barre buste penché','B:Rowing barre supination','B:Rowing T-bar',
+    'H:Rowing haltère un bras','H:Rowing haltères buste penché','M:Rowing assis machine','M:Tirage vertical machine',
+    'S:Rowing barre guidée','P:Pull-over poulie haute bras tendus','P:Tirage un bras poulie','C:Rowing inversé (barre basse)','E:Tirage élastique','K:Rowing kettlebell'],
+  lombaires: ['C:Extension au banc à lombaires','M:Extension lombaires machine','B:Soulevé de terre','B:Good morning barre',
+    'B:Soulevé de terre jambes tendues','C:Superman au sol','C:Bird-dog','P:Tirage poulie entre les jambes','H:Extension au banc avec charge','K:Soulevé de terre kettlebell'],
+  abdos: ['C:Crunch au sol','M:Crunch machine','P:Crunch poulie haute','C:Relevé de jambes suspendu','C:Relevé de genoux chaise romaine',
+    'C:Relevé de jambes au sol','C:Gainage planche','C:Gainage latéral','C:Russian twist','H:Russian twist avec charge',
+    'C:Mountain climbers','C:Roulette abdominale','M:Rotation du buste machine','P:Rotation du buste poulie (woodchopper)',
+    'C:Crunch oblique','C:Crunch inversé','C:Sit-up','H:Flexion latérale haltère','C:Dead bug','E:Pallof press élastique'],
+  jambes: ['B:Squat barre','B:Squat avant (front squat)','S:Squat barre guidée','H:Squat gobelet','M:Hack squat',
+    'M:Presse à cuisses','M:Presse à cuisses une jambe','M:Extension de jambes (leg extension)','M:Flexion de jambes allongé (leg curl)',
+    'M:Flexion de jambes assis','H:Fentes haltères','B:Fentes barre','H:Fentes marchées','H:Fentes bulgares',
+    'S:Fentes barre guidée','B:Soulevé de terre roumain','H:Soulevé de terre roumain haltères','M:Adducteurs machine',
+    'M:Abducteurs machine','H:Montée sur banc (step-up)','C:Squat poids du corps','C:Chaise contre le mur','K:Squat kettlebell','E:Squat élastique'],
+  fessiers: ['B:Hip thrust barre','M:Hip thrust machine','H:Hip thrust haltère','C:Pont fessier au sol','P:Kickback fessier poulie',
+    'M:Kickback fessier machine','P:Abduction hanche poulie','B:Soulevé de terre sumo','K:Swing kettlebell','E:Marche latérale élastique','E:Abduction assise élastique'],
+  mollets: ['M:Mollets debout machine','M:Mollets assis machine','M:Mollets à la presse','S:Mollets debout barre guidée',
+    'H:Mollets debout haltères','H:Mollets une jambe haltère','B:Mollets debout barre','C:Mollets debout poids du corps','M:Tibial antérieur machine']
+};
+
+// Objectifs d'entraînement : repères classiques de séries, répétitions, intensité et repos
+var MUS_OBJ = [
+  { id:'force', nom:'Gain de force',   reps:[3,6],   series:[3,5], defS:4, defR:5,  charge:'80 % du max et plus', repos:'3 à 5 min',
+    txt:'Charges lourdes, peu de répétitions, longues récupérations.',
+    src:'Les charges d\'au moins 80 % du max sont celles qui développent le mieux la force (ACSM 2026), avec 3 à 5 min de repos entre les séries (ACSM 2009).' },
+  { id:'masse', nom:'Prise de masse',  reps:[8,12],  series:[3,5], defS:3, defR:10, charge:'65 à 80 % du max', repos:'1 à 2 min',
+    txt:'Charges moyennes et beaucoup de volume : vise au moins 10 séries par groupe musculaire et par semaine.',
+    src:'C\'est le volume hebdomadaire qui compte le plus pour le muscle (ACSM 2026). Le muscle se développe aussi avec d\'autres charges, tant que l\'effort est réel (Schoenfeld 2021).' },
+  { id:'explo', nom:'Force explosive', reps:[3,5],   series:[3,5], defS:4, defR:5,  charge:'30 à 70 % du max', repos:'2 à 3 min',
+    txt:'Charges légères à moyennes, poussées le plus vite possible, sans aller à la fatigue.',
+    src:'La puissance se travaille avec des charges modérées, un petit volume et une montée de barre rapide (ACSM 2026).' },
+  { id:'poids', nom:'Perte de poids',  reps:[15,20], series:[3,4], defS:3, defR:15, charge:'40 à 60 % du max', repos:'moins de 90 s',
+    txt:'Séries longues et peu de repos. La perte de poids se joue surtout dans l\'assiette : la musculation sert à garder ton muscle.',
+    src:'Associée à une alimentation contrôlée, la musculation fait perdre de la graisse en préservant le muscle (Lopez 2022). Le format proposé est celui de l\'endurance musculaire (ACSM 2009).' }
+];
+var MUS_SOURCES = [
+  ['fr', 'Sci-Sport · Charge ou répétitions ?', 'Augmenter la charge ou ajouter des répétitions : les deux font progresser sur 8 semaines, avec un léger avantage à la charge pour la force maximale.', 'https://sci-sport.com/surcharge-progressive-mieux-vaut-il-augmenter-la-charge-ou-le-nombre-de-repetitions/'],
+  ['fr', 'Sci-Sport · Volume, force et masse', 'Plus le nombre de séries par semaine est élevé, plus le muscle se développe ; l\'effet est moins net sur la force.', 'https://sci-sport.com/impact-du-volume-dentrainement-sur-la-force-et-lhypertrophie-musculaire/'],
+  ['fr', 'Sci-Sport · Repos entre les séries', 'Étude au développé couché : plus le repos est long, mieux on conserve ses répétitions d\'une série à l\'autre.', 'https://sci-sport.com/impact-de-la-duree-du-repos-inter-series-sur-le-volume-dentrainement/'],
+  ['fr', 'Sci-Sport · Périodisation', 'Méta-analyse : découper l\'entraînement en périodes fait mieux progresser la force maximale ; les débutants n\'ont pas besoin de schémas complexes.', 'https://sci-sport.com/effets-periodisation-intensite-volume-force-hypertrophie-238/'],
+  ['fr', 'Sci-Sport · Vitesse de barre', 'Méta-analyse : régler la charge sur la vitesse d\'exécution développe la force et la puissance avec moins de fatigue.', 'https://sci-sport.com/effet-entrainement-base-sur-la-vitesse-sur-les-performances-260/'],
+  ['fr', 'Sci-Sport · Alléger le volume', 'Réduire ponctuellement le volume ne freine pas les progrès : c\'est le principe sur lequel repose l\'affûtage.', 'https://sci-sport.com/deload-en-musculation-reduire-temporairement-le-volume-freine-t-il-les-gains-270/'],
+  ['fr', 'Sci-Sport · Musculation et déficit calorique', 'Méta-analyse de 59 études : en déficit calorique la force continue de progresser, mais le muscle se construit moins bien ; mieux vaut un déficit modéré.', 'https://sci-sport.com/impact-du-deficit-denergie-sur-les-gains-en-musculation/'],
+  ['fr', 'INSEP · La perte de masse grasse', 'Chapitre d\'un ouvrage de l\'INSEP pour les sportifs : objectifs de perte raisonnables et protéines suffisantes pour garder le muscle.', 'https://books.openedition.org/insep/1233'],
+  ['en', 'ACSM, prise de position 2026', 'Synthèse de 137 revues (plus de 30 000 participants) : force avec des charges lourdes, muscle avec le volume, puissance avec des charges modérées déplacées vite.', 'https://pmc.ncbi.nlm.nih.gov/articles/PMC12965823'],
+  ['en', 'Travis et coll., 2020', 'Affûtage en force athlétique : réduire le volume avant la compétition en gardant des charges lourdes.', 'https://www.ncbi.nlm.nih.gov/pmc/articles/PMC7552788/'],
+  ['en', 'Loturco et coll., 2019', 'Étude menée sur des haltérophiles paralympiques : la vitesse de barre au développé couché reflète fidèlement la charge, surtout au-dessus de 70 % du max.', 'https://doi.org/10.1123/ijspp.2018-0452']
+];
+// Programmes types par période : [groupe, exercice, séries, répétitions, % du max au développé couché (0 = charge libre)]
+var MUS_PROG_REF = 'pecs-developpe-couche-barre';
+var MUS_PROG_ORDER = ['construction', 'force', 'affutage', 'compet'];
+var MUS_PROG = {
+  construction: { nom: 'Période de construction', txt: 'Beaucoup de volume à charges moyennes pour bâtir la base.', seances: [
+    { nom: 'A · Poussée, volume', exos: [['pecs','Développé couché barre',4,8,70], ['pecs','Développé incliné haltères',3,10,0], ['triceps','Dips machine',3,10,0], ['triceps','Extension triceps corde',3,12,0]] },
+    { nom: 'B · Tirage et épaules', exos: [['dorsaux','Tirage vertical prise large',4,10,0], ['dorsaux','Rowing assis machine',3,10,0], ['epaules','Développé épaules haltères',3,10,0], ['epaules','Face pull',3,12,0], ['biceps','Curl haltères',3,12,0]] },
+    { nom: 'C · Poussée, endurance', exos: [['pecs','Développé couché barre',3,10,65], ['triceps','Développé couché prise serrée',3,8,0], ['pecs','Pec deck (butterfly)',3,12,0], ['epaules','Élévations latérales haltères',3,12,0]] }
+  ] },
+  force: { nom: 'Période de force', txt: 'Charges lourdes, peu de répétitions, longues récupérations.', seances: [
+    { nom: 'A · Développé couché lourd', exos: [['pecs','Développé couché barre',5,4,85], ['triceps','Développé couché prise serrée',4,6,0], ['triceps','Barre au front',3,8,0]] },
+    { nom: 'B · Tirage et épaules', exos: [['dorsaux','Tirage vertical prise large',4,6,0], ['dorsaux','Rowing assis machine',4,8,0], ['epaules','Développé épaules haltères',3,8,0], ['epaules','Face pull',3,12,0]] },
+    { nom: 'C · Développé couché, technique', exos: [['pecs','Développé couché barre',4,5,80], ['pecs','Développé incliné barre',3,6,0], ['triceps','Extension triceps poulie haute barre',3,8,0]] }
+  ] },
+  affutage: { nom: 'Affûtage', txt: 'Charges lourdes conservées, volume réduit d\'environ moitié, travail de vitesse.', seances: [
+    { nom: 'A · Lourd et court', exos: [['pecs','Développé couché barre',3,2,90], ['triceps','Développé couché prise serrée',2,5,0]] },
+    { nom: 'B · Entretien du dos', exos: [['dorsaux','Tirage vertical prise large',2,8,0], ['epaules','Face pull',2,12,0]] },
+    { nom: 'C · Vitesse de barre', exos: [['pecs','Développé couché barre',4,3,60], ['triceps','Extension triceps corde',2,10,0]] }
+  ] },
+  compet: { nom: 'Semaine de compétition', txt: 'Deux séances courtes en début de semaine, puis repos jusqu\'au jour J.', seances: [
+    { nom: 'A · Rappel lourd (5 à 6 jours avant)', exos: [['pecs','Développé couché barre',3,2,80]] },
+    { nom: 'B · Vitesse (3 à 4 jours avant)', exos: [['pecs','Développé couché barre',3,3,60]] }
+  ] }
+};
+var _mus = { panel:null, menu:null, newOpen:false, tab:'seance', libGroup:null, libQuery:'', libEquip:'', pick:null, exo:null, detail:null, confirm:null, flash:null, bound:false };
+var _musIndex = null;
+
+// ── Utilitaires ──
+function musEsc(s) { return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+function musNorm(s) { s = String(s || '').toLowerCase(); try { s = s.normalize('NFD').replace(/[̀-ͯ]/g,''); } catch(e) {} return s; }
+function musSlug(s) { return musNorm(s).replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,''); }
+function musPad(n) { return n < 10 ? '0' + n : String(n); }
+function musDateKey(d) { d = d || new Date(); return d.getFullYear() + '-' + musPad(d.getMonth()+1) + '-' + musPad(d.getDate()); }
+function musNum(v) { if (v === null || v === undefined || v === '') return NaN; var n = parseFloat(String(v).replace(',', '.')); return isFinite(n) ? n : NaN; }
+function musClamp(n, lo, hi) { return Math.min(hi, Math.max(lo, n)); }
+function musFmt(n) { return isFinite(n) ? (Math.round(n * 100) / 100).toLocaleString('fr-FR', { maximumFractionDigits: 2 }) : '—'; }
+function musFmtDate(key) {
+  var p = String(key || '').split('-'); if (p.length !== 3) return '';
+  var d = new Date(+p[0], +p[1]-1, +p[2]);
+  if (isNaN(d.getTime())) return '';
+  var j = ['dim.','lun.','mar.','mer.','jeu.','ven.','sam.'][d.getDay()];
+  var m = ['janv.','févr.','mars','avr.','mai','juin','juil.','août','sept.','oct.','nov.','déc.'][d.getMonth()];
+  return j + ' ' + d.getDate() + ' ' + m;
+}
+function musFmtHeure(ts) { var d = new Date(ts); if (isNaN(d.getTime())) return ''; return musPad(d.getHours()) + ' h ' + musPad(d.getMinutes()); }
+function musGroupName(id) { for (var i = 0; i < MUS_GROUPS.length; i++) if (MUS_GROUPS[i][0] === id) return MUS_GROUPS[i][1]; return 'Autre'; }
+function musGroupColor(id) { for (var i = 0; i < MUS_GROUPS.length; i++) if (MUS_GROUPS[i][0] === id) return MUS_GROUPS[i][2]; return '#9098b1'; }
+function musStep(equip) { return (equip === 'H' || equip === 'K') ? 1 : 2.5; }
+
+// ── Stockage ──
+function musGet(key, def) { try { var v = localStorage.getItem(key); if (!v) return def; var o = JSON.parse(v); return o == null ? def : o; } catch(e) { return def; } }
+function musSet(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); return true; } catch(e) { return false; } }
+function musLoadSessions() { var a = musGet('oh_muscu_sessions', []); return Array.isArray(a) ? a.filter(function(s){ return s && Array.isArray(s.exos); }) : []; }
+function musSaveSessions(a) { if (!musSet('oh_muscu_sessions', a) && typeof ohToast === 'function') ohToast('Enregistrement impossible : stockage plein'); }
+function musLoadCurrent() { var c = musGet('oh_muscu_current', null); return (c && Array.isArray(c.exos)) ? c : null; }
+function musSaveCurrent(c) { if (c) musSet('oh_muscu_current', c); else { try { localStorage.removeItem('oh_muscu_current'); } catch(e) {} } }
+function musLoadCustom() { var a = musGet('oh_muscu_custom', []); return Array.isArray(a) ? a.filter(function(x){ return x && x.id && x.nom; }) : []; }
+
+// ── Objectif et compétition ──
+function musObjById(id) { for (var i = 0; i < MUS_OBJ.length; i++) if (MUS_OBJ[i].id === id) return MUS_OBJ[i]; return null; }
+function musObj() { return musObjById(musGet('oh_muscu_objectif', '')); }
+function musLoadCompet() {
+  var c = musGet('oh_muscu_compet', null); if (!c || typeof c !== 'object') return { nom: '', date: '' };
+  return { nom: typeof c.nom === 'string' ? c.nom.slice(0, 60) : '', date: /^\d{4}-\d{2}-\d{2}$/.test(c.date || '') ? c.date : '' };
+}
+function musDaysTo(key) {
+  var p = String(key || '').split('-'); if (p.length !== 3) return NaN;
+  var d = new Date(+p[0], +p[1]-1, +p[2]), n = new Date(), t0 = new Date(n.getFullYear(), n.getMonth(), n.getDate());
+  if (isNaN(d.getTime()) || d.getMonth() !== +p[1]-1) return NaN;
+  return Math.round((d.getTime() - t0.getTime()) / 86400000);
+}
+// Repère de planification selon le temps restant avant la compétition
+function musPhase(days) {
+  if (!isFinite(days)) return null;
+  if (days < 0) return { id: 'passee', nom: 'Compétition passée', txt: 'Pense à saisir la date de la prochaine.', conseil: [] };
+  if (days <= 7) return { id: 'compet', nom: 'Semaine de compétition', txt: 'Séances courtes et légères pour arriver frais sur le plateau, sans dépasser 3 jours d\'arrêt complet avant le jour J.', conseil: ['explo'] };
+  if (days <= 21) return { id: 'affutage', nom: 'Affûtage', txt: 'On garde des charges lourdes mais on réduit le volume d\'environ moitié, et on travaille la vitesse de barre.', conseil: ['force', 'explo'] };
+  if (days <= 84) return { id: 'force', nom: 'Période de force', txt: 'C\'est le moment de monter les charges : priorité au gain de force.', conseil: ['force'] };
+  return { id: 'construction', nom: 'Période de construction', txt: 'La compétition est loin : on construit la base, du muscle puis de la force.', conseil: ['masse', 'force'] };
+}
+function musFmtDelai(days) {
+  if (days === 0) return 'C\'est aujourd\'hui';
+  if (days === 1) return 'Demain';
+  if (days < 0) return 'Il y a ' + (-days) + ' jour' + (days < -1 ? 's' : '');
+  return 'J-' + days + (days >= 14 ? ' · ' + Math.floor(days / 7) + ' semaines' : '');
+}
+
+// ── Programme type ──
+function musProgPhase() {
+  var c = musLoadCompet(), d = c.date ? musDaysTo(c.date) : NaN;
+  if (isFinite(d) && d >= 0) return { id: musPhase(d).id, auto: true };
+  var m = musGet('oh_muscu_phase', 'force');
+  return { id: MUS_PROG[m] ? m : 'force', auto: false };
+}
+function musMax() { var n = musNum(musGet('oh_muscu_max', null)); return n > 0 ? n : NaN; }
+// Max estimé au développé couché à partir des séries enregistrées (même table que l'onglet Para DC)
+function musMaxEstime() {
+  var best = NaN, ss = musLoadSessions();
+  for (var i = 0; i < ss.length; i++) for (var j = 0; j < ss[i].exos.length; j++) {
+    var e = ss[i].exos[j]; if (!e || e.id !== MUS_PROG_REF) continue;
+    var d = musDone(e.series);
+    for (var k = 0; k < d.length; k++) {
+      var kg = musNum(d[k].kg) || 0, r = musNum(d[k].reps); if (!(kg > 0) || r < 1 || r > 10) continue;
+      var est = (typeof pdcEst === 'function' && isFinite(pdcEst(kg, r))) ? pdcEst(kg, r) : kg * (1 + r / 30);
+      if (!isFinite(best) || est > best) best = est;
+    }
+  }
+  return isFinite(best) ? Math.round(best * 2) / 2 : NaN;
+}
+function musProgKg(pct) { var m = musMax(); return (pct > 0 && isFinite(m)) ? Math.round(m * pct / 100 / 2.5) * 2.5 : NaN; }
+function musProgExo(item) { return musFindExo(item[0] + '-' + musSlug(item[1])); }
+function musStartProg(phaseId, idx) {
+  var ph = MUS_PROG[phaseId], se = ph ? ph.seances[idx] : null; if (!se) return null;
+  var cur = musStart(null); cur.programme = ph.nom + ' · ' + se.nom;
+  for (var i = 0; i < se.exos.length; i++) {
+    var it = se.exos[i], ex = musProgExo(it); if (!ex) continue;
+    var kg = musProgKg(it[4]);
+    if (!isFinite(kg)) { var p = musPerfs(ex.id, 1); kg = (it[4] === 0 && p.length) ? (musNum(p[0].series[0].kg) || 0) : NaN; }
+    var series = [];
+    for (var s = 0; s < it[2]; s++) series.push({ kg: isFinite(kg) ? kg : null, reps: it[3], fait: false });
+    cur.exos.push({ id: ex.id, nom: ex.nom, groupe: ex.groupe, equip: ex.equip, series: series });
+  }
+  musSaveCurrent(cur); return cur;
+}
+
+// ── Bibliothèque ──
+function musAllExos() {
+  if (!_musIndex) {
+    _musIndex = [];
+    for (var g = 0; g < MUS_GROUPS.length; g++) {
+      var gid = MUS_GROUPS[g][0], list = MUS_LIB[gid] || [];
+      for (var i = 0; i < list.length; i++) {
+        var eq = list[i].charAt(0), nom = list[i].slice(2);
+        _musIndex.push({ id: gid + '-' + musSlug(nom), nom: nom, groupe: gid, equip: eq });
+      }
+    }
+  }
+  var custom = musLoadCustom();
+  for (var c = 0; c < custom.length; c++) custom[c].perso = true;
+  return _musIndex.concat(custom);
+}
+function musFindExo(id) { var all = musAllExos(); for (var i = 0; i < all.length; i++) if (all[i].id === id) return all[i]; return null; }
+
+// ── Calculs sur l'historique ──
+function musDone(series) { return (series || []).filter(function(s){ return s && s.fait && musNum(s.reps) > 0; }); }
+function musSortedSessions() { return musLoadSessions().sort(function(a, b){ return (b.fin || 0) - (a.fin || 0); }); }
+function musPerfs(exoId, max) {
+  var out = [], ss = musSortedSessions();
+  for (var i = 0; i < ss.length && out.length < (max || 1); i++) {
+    for (var j = 0; j < ss[i].exos.length; j++) {
+      var e = ss[i].exos[j];
+      if (e && e.id === exoId) { var d = musDone(e.series); if (d.length) { out.push({ date: ss[i].date, lieu: ss[i].lieu, series: d }); break; } }
+    }
+  }
+  return out;
+}
+function musBest(exoId) {
+  var best = null, ss = musLoadSessions();
+  for (var i = 0; i < ss.length; i++) for (var j = 0; j < ss[i].exos.length; j++) {
+    var e = ss[i].exos[j]; if (!e || e.id !== exoId) continue;
+    var d = musDone(e.series);
+    for (var k = 0; k < d.length; k++) {
+      var kg = musNum(d[k].kg) || 0, reps = musNum(d[k].reps);
+      if (!best || kg > best.kg || (kg === best.kg && reps > best.reps)) best = { kg: kg, reps: reps, date: ss[i].date };
+    }
+  }
+  return best;
+}
+function musFmtSeries(series) {
+  var d = musDone(series); if (!d.length) return 'aucune série validée';
+  var same = d.every(function(s){ return (musNum(s.kg) || 0) === (musNum(d[0].kg) || 0) && musNum(s.reps) === musNum(d[0].reps); });
+  function one(s) { var kg = musNum(s.kg) || 0; return musFmt(musNum(s.reps)) + (kg > 0 ? ' × ' + musFmt(kg) + ' kg' : ' rép.'); }
+  if (same) { var kg0 = musNum(d[0].kg) || 0; return d.length + ' × ' + musFmt(musNum(d[0].reps)) + (kg0 > 0 ? ' à ' + musFmt(kg0) + ' kg' : ' (sans charge)'); }
+  return d.map(one).join(' · ');
+}
+// Suggestion de progression : si toutes les séries ont tenu les répétitions de la 1re, on monte d'un cran
+function musSuggest(exoId, equip) {
+  var p = musPerfs(exoId, 1); if (!p.length) return null;
+  var d = p[0].series, kgMax = 0, r0 = musNum(d[0].reps), tenu = true, rMin = r0, o = musObj();
+  for (var i = 0; i < d.length; i++) { kgMax = Math.max(kgMax, musNum(d[i].kg) || 0); if (musNum(d[i].reps) < r0) tenu = false; rMin = Math.min(rMin, musNum(d[i].reps)); }
+  if (o && kgMax > 0) {
+    var lo = o.reps[0], hi = o.reps[1];
+    if (rMin >= hi) { var nx = musClamp(kgMax + musStep(equip), 0, 500); return { type: 'both', kg: nx, reps: lo, txt: 'Essaie ' + musFmt(nx) + ' kg sur ' + lo + ' rép. par série' }; }
+    if (rMin < lo) return { type: 'reps', reps: lo, txt: 'Allège un peu pour tenir ' + lo + ' rép. par série' };
+    var cible = musClamp(rMin + 1, lo, hi);
+    return { type: 'both', kg: kgMax, reps: cible, txt: 'Garde ' + musFmt(kgMax) + ' kg et vise ' + cible + ' rép. par série' };
+  }
+  if (kgMax <= 0) return tenu ? { type: 'reps', reps: musClamp(r0 + 1, 1, 100), txt: 'Essaie ' + musFmt(musClamp(r0 + 1, 1, 100)) + ' rép. par série' } : null;
+  if (!tenu) return { type: 'kg', kg: kgMax, txt: 'Reste à ' + musFmt(kgMax) + ' kg et vise ' + musFmt(r0) + ' rép. partout' };
+  var next = musClamp(kgMax + musStep(equip), 0, 500);
+  return { type: 'kg', kg: next, txt: 'Essaie ' + musFmt(next) + ' kg' };
+}
+function musSessionStats(s) {
+  var series = 0, volume = 0, exos = 0;
+  for (var i = 0; i < s.exos.length; i++) {
+    var d = musDone(s.exos[i].series); if (d.length) exos++;
+    for (var k = 0; k < d.length; k++) { series++; volume += (musNum(d[k].kg) || 0) * musNum(d[k].reps); }
+  }
+  var duree = (s.fin && s.debut && s.fin > s.debut) ? Math.round((s.fin - s.debut) / 60000) : 0;
+  return { series: series, volume: Math.round(volume), exos: exos, duree: duree };
+}
+function musWeekStats() {
+  var now = new Date(), dow = now.getDay() === 0 ? 6 : now.getDay() - 1;
+  var lundi = musDateKey(new Date(now.getFullYear(), now.getMonth(), now.getDate() - dow));
+  var ss = musLoadSessions(), n = 0, series = 0, volume = 0;
+  for (var i = 0; i < ss.length; i++) if (ss[i].date >= lundi) { var st = musSessionStats(ss[i]); n++; series += st.series; volume += st.volume; }
+  return { n: n, series: series, volume: volume };
+}
+
+// ── Actions sur la séance ──
+function musNewSeries(exoId) {
+  var p = musPerfs(exoId, 1);
+  if (p.length) return p[0].series.map(function(s){ return { kg: musNum(s.kg) || 0, reps: musNum(s.reps), fait: false }; });
+  var o = musObj(), out = [], n = o ? o.defS : 3;
+  for (var i = 0; i < n; i++) out.push({ kg: null, reps: o ? o.defR : null, fait: false });
+  return out;
+}
+function musMakeEntry(exo) { return { id: exo.id, nom: exo.nom, groupe: exo.groupe, equip: exo.equip, series: musNewSeries(exo.id) }; }
+function musStart(fromSession) {
+  var cur = { id: 's' + Date.now(), date: musDateKey(), debut: Date.now(), lieu: fromSession && fromSession.lieu ? fromSession.lieu : '', objectif: musGet('oh_muscu_objectif', ''), exos: [] };
+  if (fromSession) {
+    for (var i = 0; i < fromSession.exos.length; i++) {
+      var e = fromSession.exos[i]; if (!e || !e.id) continue;
+      var d = musDone(e.series);
+      cur.exos.push({ id: e.id, nom: e.nom, groupe: e.groupe, equip: e.equip,
+        series: d.length ? d.map(function(s){ return { kg: musNum(s.kg) || 0, reps: musNum(s.reps), fait: false }; }) : musNewSeries(e.id) });
+    }
+  }
+  musSaveCurrent(cur); return cur;
+}
+function musFinish() {
+  var cur = musLoadCurrent(); if (!cur) return false;
+  var exos = [];
+  for (var i = 0; i < cur.exos.length; i++) {
+    var d = musDone(cur.exos[i].series);
+    if (d.length) exos.push({ id: cur.exos[i].id, nom: cur.exos[i].nom, groupe: cur.exos[i].groupe, equip: cur.exos[i].equip,
+      series: d.map(function(s){ return { kg: musNum(s.kg) || 0, reps: musNum(s.reps), fait: true }; }) });
+  }
+  if (!exos.length) return false;
+  var s = { id: cur.id, date: cur.date, debut: cur.debut, fin: Date.now(), lieu: cur.lieu || '', objectif: musObjById(cur.objectif) ? cur.objectif : '', programme: typeof cur.programme === 'string' ? cur.programme.slice(0, 120) : '', exos: exos };
+  var all = musLoadSessions(); all.push(s); musSaveSessions(all); musSaveCurrent(null);
+  return s;
+}
+
+// ── Rendu ──
+function ohMuscuRender() {
+  var cont = document.getElementById('mus-content'); if (!cont) return;
+  musBind(cont);
+  var h = '<div class="mus-wrap">';
+  if (_mus.pick) {
+    var cur = musLoadCurrent(), cible = (_mus.pick.type === 'swap' && cur && cur.exos[_mus.pick.i]) ? cur.exos[_mus.pick.i].nom : '';
+    h += '<div class="mus-banner"><div>' + (cible ? 'Remplacer <strong>' + musEsc(cible) + '</strong> par…' : 'Choisis un exercice à ajouter') + '</div>'
+      + '<button type="button" class="mus-link" data-a="pick-cancel">Annuler</button></div>';
+  } else {
+    h += '<div class="mus-tabs" role="tablist">'
+      + musTabBtn('seance', 'Séance') + musTabBtn('lib', 'Exercices') + musTabBtn('hist', 'Historique') + '</div>';
+  }
+  if (_mus.pick || _mus.tab === 'lib') h += musViewLib();
+  else if (_mus.tab === 'hist') h += musViewHist();
+  else h += musViewSeance();
+  cont.innerHTML = h + '</div>';
+}
+function musTabBtn(id, label) { return '<button type="button" role="tab" aria-selected="' + (_mus.tab === id) + '" class="mus-tab' + (_mus.tab === id ? ' active' : '') + '" data-a="tab" data-v="' + id + '">' + label + '</button>'; }
+function musConfirmLabel(key, label) { return _mus.confirm === key ? 'Confirmer ?' : label; }
+
+function musViewSeance() {
+  var cur = musLoadCurrent();
+  return cur ? musViewCurrent(cur) : musViewHome();
+}
+function musObjCard() {
+  var o = musObj(), c = musLoadCompet(), ph = c.date ? musPhase(musDaysTo(c.date)) : null, h = '';
+  h += '<div class="mus-card"><div class="mus-card-title">Mon objectif</div><div class="mus-obj-grid">';
+  for (var i = 0; i < MUS_OBJ.length; i++) {
+    var on = o && o.id === MUS_OBJ[i].id, rec = ph && ph.conseil.indexOf(MUS_OBJ[i].id) !== -1;
+    h += '<button type="button" class="mus-obj' + (on ? ' active' : '') + '" data-a="obj" data-v="' + MUS_OBJ[i].id + '" aria-pressed="' + (!!on) + '">' + MUS_OBJ[i].nom
+      + (rec ? '<span class="mus-obj-rec">Conseillé</span>' : '') + '</button>';
+  }
+  h += '</div>';
+  if (o) h += '<div class="mus-obj-facts">'
+    + '<span><strong>' + o.series[0] + ' à ' + o.series[1] + '</strong> séries</span><span><strong>' + o.reps[0] + ' à ' + o.reps[1] + '</strong> rép.</span>'
+    + '<span>Repos <strong>' + o.repos + '</strong></span><span><strong>' + o.charge + '</strong></span></div>';
+  h += '<button type="button" class="mus-link mus-link-muted" data-a="src-open" aria-expanded="' + (!!_mus.srcOpen) + '">' + (_mus.srcOpen ? 'Masquer les sources' : 'Sources') + '</button>';
+  if (_mus.srcOpen) {
+    h += '<div class="mus-sources">';
+    for (var lg = 0; lg < 2; lg++) {
+      h += '<div class="mus-card-title" style="margin:12px 0 4px">' + (lg === 0 ? 'Articles en français' : 'Publications d\'origine (en anglais)') + '</div>';
+      for (var k = 0; k < MUS_SOURCES.length; k++) if (MUS_SOURCES[k][0] === (lg === 0 ? 'fr' : 'en'))
+        h += '<a class="mus-source" href="' + MUS_SOURCES[k][3] + '" target="_blank" rel="noopener noreferrer"><strong>' + MUS_SOURCES[k][1] + '</strong><span>' + MUS_SOURCES[k][2] + '</span></a>';
+    }
+    h += '</div>';
+  }
+  return h + '</div>';
+}
+function musCompetCard() {
+  var c = musLoadCompet(), days = c.date ? musDaysTo(c.date) : NaN, ph = musPhase(days), h = '';
+  h += '<div class="mus-card"><div class="mus-card-title">Ma prochaine compétition</div>';
+  if (ph) h += '<div class="mus-compet"><div class="mus-compet-j">' + musFmtDelai(days) + '</div><div class="mus-row-title">' + ph.nom + '</div></div>';
+  h += '<div class="mus-compet-form"><input class="mus-search" id="mus-compet-nom" type="text" maxlength="60" autocomplete="off" placeholder="Nom de la compétition" aria-label="Nom de la compétition" value="' + musEsc(c.nom) + '">'
+    + '<input class="mus-search" id="mus-compet-date" type="date" aria-label="Date de la compétition" value="' + musEsc(c.date) + '"></div>';
+  if (c.nom || c.date) h += '<button type="button" class="mus-link mus-link-muted" data-a="compet-clear">Effacer</button>';
+  return h + '</div>';
+}
+function musProgCard() {
+  var pp = musProgPhase(), ph = MUS_PROG[pp.id], max = musMax(), est = musMaxEstime(), h = '', i, j;
+  h += '<div class="mus-card"><div class="mus-card-title">Mon programme</div>';
+  if (pp.auto) h += '<div class="mus-row-title" style="margin-bottom:10px">' + ph.nom + '</div>';
+  else {
+    h += '<div class="mus-chips" style="margin-bottom:10px">';
+    for (i = 0; i < MUS_PROG_ORDER.length; i++) h += '<button type="button" class="mus-chip' + (pp.id === MUS_PROG_ORDER[i] ? ' active' : '') + '" data-a="phase" data-v="' + MUS_PROG_ORDER[i] + '">' + MUS_PROG[MUS_PROG_ORDER[i]].nom + '</button>';
+    h += '</div>';
+  }
+  h += '<label class="mus-max"><span>Mon max au développé couché (kg)</span><input class="mus-search" id="mus-max" type="text" inputmode="decimal" autocomplete="off" maxlength="6" placeholder="—" value="' + (isFinite(max) ? musEsc(String(max).replace('.', ',')) : '') + '"></label>';
+  if (isFinite(est) && est !== max) h += '<button type="button" class="mus-link" data-a="max-est">Utiliser mon max estimé : ' + musFmt(est) + ' kg</button>';
+  for (i = 0; i < ph.seances.length; i++) {
+    h += '<div class="mus-prog"><div class="mus-row-title">' + ph.seances[i].nom + '</div>';
+    for (j = 0; j < ph.seances[i].exos.length; j++) {
+      var it = ph.seances[i].exos[j], kg = musProgKg(it[4]);
+      h += '<div class="mus-perf"><span>' + it[1] + '</span><span>' + it[2] + ' × ' + it[3] + (it[4] ? ' à ' + (isFinite(kg) ? musFmt(kg) + ' kg' : it[4] + ' %') : '') + '</span></div>';
+    }
+    h += '<button type="button" class="mus-btn mus-btn-sec" data-a="prog-start" data-v="' + pp.id + '" data-i="' + i + '">Lancer</button></div>';
+  }
+  return h + '</div>';
+}
+function musNavRow(id, label, val) {
+  return '<button type="button" class="mus-row mus-nav" data-a="panel" data-v="' + id + '"><span class="mus-nav-lbl">' + label + '</span><span class="mus-nav-val">' + val + '</span><span class="mus-chev" aria-hidden="true">›</span></button>';
+}
+function musViewHome() {
+  if (_mus.panel === 'obj' || _mus.panel === 'compet' || _mus.panel === 'prog') {
+    return '<div class="mus-lib-head"><button type="button" class="mus-link" data-a="panel" data-v="">‹ Retour</button></div>'
+      + (_mus.panel === 'obj' ? musObjCard() : _mus.panel === 'compet' ? musCompetCard() : musProgCard());
+  }
+  var ss = musSortedSessions(), w = musWeekStats(), o = musObj(), c = musLoadCompet(), days = c.date ? musDaysTo(c.date) : NaN, pp = musProgPhase(), h = '';
+  h += '<button type="button" class="mus-btn mus-btn-main mus-btn-big" data-a="start">Démarrer une séance</button>';
+  if (ss.length) h += '<button type="button" class="mus-btn mus-btn-sec" data-a="redo" data-v="' + musEsc(ss[0].id) + '">Refaire la dernière séance</button>';
+  h += '<div class="mus-card mus-list" style="margin-top:14px">'
+    + musNavRow('obj', 'Objectif', o ? o.nom : 'À choisir')
+    + musNavRow('compet', 'Compétition', isFinite(days) ? (days < 0 ? 'Passée' : days === 0 ? 'Aujourd\'hui' : 'J-' + days) : 'Ajouter')
+    + musNavRow('prog', 'Programme', MUS_PROG[pp.id].nom) + '</div>';
+  h += '<div class="mus-card"><div class="mus-card-title">Cette semaine</div><div class="mus-stats">'
+    + '<div><div class="mus-stat-val">' + w.n + '</div><div class="mus-stat-lbl">séance' + (w.n > 1 ? 's' : '') + '</div></div>'
+    + '<div><div class="mus-stat-val">' + w.series + '</div><div class="mus-stat-lbl">série' + (w.series > 1 ? 's' : '') + '</div></div>'
+    + '<div><div class="mus-stat-val">' + musFmt(w.volume) + '</div><div class="mus-stat-lbl">kg soulevés</div></div></div></div>';
+  return h;
+}
+function musSessionRow(s) {
+  var st = musSessionStats(s), noms = s.exos.slice(0, 3).map(function(e){ return musEsc(e.nom); }).join(', ') + (s.exos.length > 3 ? '…' : '');
+  return '<button type="button" class="mus-row" data-a="detail" data-v="' + musEsc(s.id) + '">'
+    + '<div class="mus-row-main"><div class="mus-row-title">' + musFmtDate(s.date) + (s.lieu ? ' · ' + musEsc(s.lieu) : '') + '</div>'
+    + '<div class="mus-row-sub">' + st.exos + ' exercice' + (st.exos > 1 ? 's' : '') + ' · ' + st.series + ' série' + (st.series > 1 ? 's' : '') + (st.duree ? ' · ' + st.duree + ' min' : '') + '</div>'
+    + '<div class="mus-row-sub">' + noms + '</div></div><span class="mus-chev" aria-hidden="true">›</span></button>';
+}
+function musViewCurrent(cur) {
+  var o = musObjById(cur.objectif), h = '<div class="mus-card"><div class="mus-card-title">' + (cur.programme ? musEsc(cur.programme) : 'Séance en cours') + '</div>'
+    + '<select class="mus-search" id="mus-lieu" aria-label="Salle" style="margin-bottom:0"><option value="">Où t\'entraînes-tu ?</option>';
+  for (var l = 0; l < MUS_LIEUX.length; l++) h += '<option value="' + musEsc(MUS_LIEUX[l]) + '"' + (cur.lieu === MUS_LIEUX[l] ? ' selected' : '') + '>' + musEsc(MUS_LIEUX[l]) + '</option>';
+  h += '</select>';
+  if (o) h += '<div class="mus-last" style="margin:8px 0 0">' + o.nom + ' · ' + o.reps[0] + ' à ' + o.reps[1] + ' rép. · repos ' + o.repos + '</div>';
+  h += '</div>';
+  _mus.noSug = !!cur.programme; // en séance de programme, la charge prescrite prime sur la suggestion
+  for (var i = 0; i < cur.exos.length; i++) h += musExoCard(cur.exos[i], i);
+  h += '<button type="button" class="mus-btn mus-btn-sec" data-a="pick-add">+ Ajouter un exercice</button>';
+  if (cur.exos.length) h += '<button type="button" class="mus-btn mus-btn-main" data-a="finish">Terminer la séance</button>';
+  h += '<button type="button" class="mus-btn mus-btn-ghost" data-a="abandon">' + musConfirmLabel('abandon', 'Abandonner') + '</button>';
+  return h;
+}
+function musExoCard(e, i) {
+  var perf = musPerfs(e.id, 1), sug = _mus.noSug ? null : musSuggest(e.id, e.equip);
+  var h = '<div class="mus-card mus-exo"><div class="mus-exo-head"><span class="mus-dot" style="background:' + musGroupColor(e.groupe) + '"></span>'
+    + '<div class="mus-exo-name">' + musEsc(e.nom) + '<div class="mus-row-sub">' + (perf.length ? 'Dernière fois : ' + musFmtSeries(perf[0].series) : musEsc(musGroupName(e.groupe)) + ' · ' + musEsc(MUS_EQUIP[e.equip] || 'Autre')) + '</div></div>'
+    + '<button type="button" class="mus-more" data-a="menu" data-i="' + i + '" aria-label="Plus d\'options" aria-expanded="' + (_mus.menu === i) + '">⋯</button></div>';
+  if (_mus.menu === i) {
+    h += '<div class="mus-exo-actions">';
+    if (e.series.length > 1) h += '<button type="button" class="mus-link" data-a="set-del" data-i="' + i + '">− Série</button>';
+    h += '<button type="button" class="mus-link" data-a="pick-swap" data-i="' + i + '">Remplacer</button>'
+      + '<button type="button" class="mus-link mus-link-muted" data-a="exo-del" data-i="' + i + '">' + musConfirmLabel('exo-del-' + i, 'Retirer') + '</button></div>';
+  }
+  if (sug) h += '<button type="button" class="mus-sug" data-a="sug" data-i="' + i + '">↗ ' + musEsc(sug.txt) + '</button>';
+  h += '<div class="mus-set-head"><span></span><span>kg</span><span>Rép.</span><span></span></div>';
+  for (var j = 0; j < e.series.length; j++) {
+    var s = e.series[j], kg = musNum(s.kg), reps = musNum(s.reps);
+    h += '<div class="mus-set' + (s.fait ? ' done' : '') + '"><span class="mus-set-n">' + (j + 1) + '</span>'
+      + musStepper('kg', i, j, isFinite(kg) ? kg : '', 'Charge série ' + (j + 1))
+      + musStepper('reps', i, j, isFinite(reps) ? reps : '', 'Répétitions série ' + (j + 1))
+      + '<button type="button" class="mus-check' + (s.fait ? ' on' : '') + '" data-a="check" data-i="' + i + '" data-j="' + j + '" aria-pressed="' + (!!s.fait) + '" aria-label="Valider la série ' + (j + 1) + '">✓</button></div>';
+  }
+  h += '<button type="button" class="mus-link" data-a="set-add" data-i="' + i + '">+ Série</button></div>';
+  return h;
+}
+function musStepper(f, i, j, val, label) {
+  var v = val === '' ? '' : String(val).replace('.', ',');
+  return '<div class="mus-stepper"><button type="button" class="mus-step" data-a="step" data-f="' + f + '" data-d="-1" data-i="' + i + '" data-j="' + j + '" aria-label="Diminuer">−</button>'
+    + '<input class="mus-input" id="mus-' + f + '-' + i + '-' + j + '" data-f="' + f + '" data-i="' + i + '" data-j="' + j + '" type="text" inputmode="decimal" autocomplete="off" maxlength="6" value="' + musEsc(v) + '" placeholder="—" aria-label="' + musEsc(label) + '">'
+    + '<button type="button" class="mus-step" data-a="step" data-f="' + f + '" data-d="1" data-i="' + i + '" data-j="' + j + '" aria-label="Augmenter">+</button></div>';
+}
+
+function musViewLib() {
+  var h = '';
+  if (_mus.exo && !_mus.pick) return musViewExo(_mus.exo);
+  if (!(_mus.pick && _mus.pick.type === 'swap')) {
+    h += '<input class="mus-search" id="mus-search" type="search" autocomplete="off" maxlength="40" placeholder="Rechercher un exercice…" aria-label="Rechercher un exercice" value="' + musEsc(_mus.libQuery) + '">';
+  }
+  return h + '<div id="mus-lib-body">' + musLibBody() + '</div>';
+}
+function musLibBody() {
+  var all = musAllExos(), q = musNorm(_mus.libQuery).trim(), h = '', i;
+  if (q && !(_mus.pick && _mus.pick.type === 'swap')) {
+    var res = all.filter(function(e){ return musNorm(e.nom).indexOf(q) !== -1 || musNorm(musGroupName(e.groupe)).indexOf(q) !== -1; });
+    if (!res.length) return '<div class="mus-empty">Aucun exercice trouvé pour « ' + musEsc(_mus.libQuery) + ' ».</div>';
+    h += '<div class="mus-card mus-list">'; for (i = 0; i < res.length; i++) h += musExoRow(res[i], true); return h + '</div>';
+  }
+  if (!_mus.libGroup) {
+    h += '<div class="mus-grid">';
+    for (i = 0; i < MUS_GROUPS.length; i++) {
+      var gid = MUS_GROUPS[i][0], n = all.filter(function(e){ return e.groupe === gid; }).length;
+      h += '<button type="button" class="mus-group" data-a="group" data-v="' + gid + '"><span class="mus-group-bar" style="background:' + MUS_GROUPS[i][2] + '"></span>'
+        + '<span class="mus-group-name">' + MUS_GROUPS[i][1] + '</span><span class="mus-group-n">' + n + ' exercices</span></button>';
+    }
+    return h + '</div>';
+  }
+  var list = all.filter(function(e){ return e.groupe === _mus.libGroup; }), cur = musLoadCurrent();
+  if (_mus.pick && _mus.pick.type === 'swap' && cur) {
+    var pris = cur.exos.map(function(e){ return e.id; });
+    list = list.filter(function(e){ return pris.indexOf(e.id) === -1; });
+  }
+  var equips = MUS_EQUIP_ORDER.filter(function(k){ return list.some(function(e){ return e.equip === k; }); });
+  h += '<div class="mus-lib-head">';
+  if (!(_mus.pick && _mus.pick.type === 'swap')) h += '<button type="button" class="mus-link" data-a="group" data-v="">‹ Groupes</button>';
+  h += '<strong>' + musEsc(musGroupName(_mus.libGroup)) + '</strong></div><div class="mus-chips">'
+    + '<button type="button" class="mus-chip' + (!_mus.libEquip ? ' active' : '') + '" data-a="equip" data-v="">Tout</button>';
+  for (i = 0; i < equips.length; i++) h += '<button type="button" class="mus-chip' + (_mus.libEquip === equips[i] ? ' active' : '') + '" data-a="equip" data-v="' + equips[i] + '">' + MUS_EQUIP[equips[i]] + '</button>';
+  h += '</div>';
+  if (_mus.libEquip) list = list.filter(function(e){ return e.equip === _mus.libEquip; });
+  if (!list.length) h += '<div class="mus-empty">Aucun exercice ici.</div>';
+  else { h += '<div class="mus-card mus-list">'; for (i = 0; i < list.length; i++) h += musExoRow(list[i], false); h += '</div>'; }
+  if (!_mus.newOpen) return h + '<button type="button" class="mus-link" data-a="new-open">+ Créer un exercice</button>';
+  h += '<div class="mus-card"><div class="mus-card-title">Nouvel exercice</div>'
+    + '<input class="mus-search" id="mus-new-nom" type="text" maxlength="60" autocomplete="off" placeholder="Nom de l\'exercice" aria-label="Nom du nouvel exercice">'
+    + '<select class="mus-search" id="mus-new-equip" aria-label="Équipement">';
+  for (i = 0; i < MUS_EQUIP_ORDER.length; i++) h += '<option value="' + MUS_EQUIP_ORDER[i] + '">' + MUS_EQUIP[MUS_EQUIP_ORDER[i]] + '</option>';
+  h += '</select><button type="button" class="mus-btn mus-btn-sec" data-a="custom-add">Créer</button></div>';
+  return h;
+}
+function musExoRow(e, showGroup) {
+  return '<button type="button" class="mus-row" data-a="exo" data-v="' + musEsc(e.id) + '"><span class="mus-dot" style="background:' + musGroupColor(e.groupe) + '"></span>'
+    + '<div class="mus-row-main"><div class="mus-row-title">' + musEsc(e.nom) + '</div><div class="mus-row-sub">' + (showGroup ? musEsc(musGroupName(e.groupe)) + ' · ' : '') + musEsc(MUS_EQUIP[e.equip] || 'Autre') + (e.perso ? ' · Perso' : '') + '</div></div>'
+    + '<span class="mus-chev" aria-hidden="true">' + (_mus.pick ? '+' : '›') + '</span></button>';
+}
+function musViewExo(id) {
+  var e = musFindExo(id); if (!e) { _mus.exo = null; return musViewLib(); }
+  var best = musBest(id), perfs = musPerfs(id, 5), sug = musSuggest(id, e.equip);
+  var h = '<div class="mus-lib-head"><button type="button" class="mus-link" data-a="exo-back">‹ Retour</button></div>'
+    + '<div class="mus-card"><div class="mus-exo-head"><span class="mus-dot" style="background:' + musGroupColor(e.groupe) + '"></span><div class="mus-exo-name">' + musEsc(e.nom)
+    + '<div class="mus-row-sub">' + musEsc(musGroupName(e.groupe)) + ' · ' + musEsc(MUS_EQUIP[e.equip] || 'Autre') + '</div></div></div>'
+    + '<div class="mus-stats"><div><div class="mus-stat-val">' + (best ? (best.kg > 0 ? musFmt(best.kg) : musFmt(best.reps)) : '—') + '</div><div class="mus-stat-lbl">' + (best && best.kg <= 0 ? 'rép. max' : 'kg · record') + '</div></div>'
+    + '<div><div class="mus-stat-val">' + perfs.length + (perfs.length === 5 ? '+' : '') + '</div><div class="mus-stat-lbl">séance' + (perfs.length > 1 ? 's' : '') + '</div></div></div>';
+  if (sug) h += '<div class="mus-last">Prochaine fois : ' + musEsc(sug.txt) + '</div>';
+  h += '<button type="button" class="mus-btn mus-btn-main" data-a="exo-add" data-v="' + musEsc(e.id) + '">Ajouter à ma séance</button>';
+  if (e.perso) h += '<button type="button" class="mus-btn mus-btn-ghost" data-a="custom-del" data-v="' + musEsc(e.id) + '">' + musConfirmLabel('custom-del', 'Supprimer cet exercice perso') + '</button>';
+  h += '</div><div class="mus-card"><div class="mus-card-title">Dernières performances</div>';
+  if (!perfs.length) h += '<div class="mus-note">Pas encore de série enregistrée sur cet exercice.</div>';
+  for (var i = 0; i < perfs.length; i++) h += '<div class="mus-perf"><span>' + musFmtDate(perfs[i].date) + '</span><span>' + musFmtSeries(perfs[i].series) + '</span></div>';
+  return h + '</div>';
+}
+
+function musViewHist() {
+  var ss = musSortedSessions(), h = '', i;
+  if (_mus.detail) {
+    var s = null; for (i = 0; i < ss.length; i++) if (ss[i].id === _mus.detail) s = ss[i];
+    if (s) return musViewDetail(s);
+    _mus.detail = null;
+  }
+  if (!ss.length) return '<div class="mus-empty">Aucune séance enregistrée pour l\'instant.<br>Ta première séance apparaîtra ici.</div>';
+  h += '<div class="mus-card mus-list">'; for (i = 0; i < ss.length; i++) h += musSessionRow(ss[i]); return h + '</div>';
+}
+function musViewDetail(s) {
+  var st = musSessionStats(s), h = '<div class="mus-lib-head"><button type="button" class="mus-link" data-a="detail-back">‹ Historique</button></div>';
+  if (_mus.flash === s.id) h += '<div class="mus-flash">Séance enregistrée. Bien joué !</div>';
+  h += '<div class="mus-card"><div class="mus-card-title">' + musFmtDate(s.date) + (s.lieu ? ' · ' + musEsc(s.lieu) : '') + (musObjById(s.objectif) ? ' · ' + musObjById(s.objectif).nom : '') + '</div><div class="mus-stats">'
+    + '<div><div class="mus-stat-val">' + st.exos + '</div><div class="mus-stat-lbl">exercice' + (st.exos > 1 ? 's' : '') + '</div></div>'
+    + '<div><div class="mus-stat-val">' + st.series + '</div><div class="mus-stat-lbl">série' + (st.series > 1 ? 's' : '') + '</div></div>'
+    + '<div><div class="mus-stat-val">' + musFmt(st.volume) + '</div><div class="mus-stat-lbl">kg soulevés</div></div>'
+    + '<div><div class="mus-stat-val">' + (st.duree || '—') + '</div><div class="mus-stat-lbl">min</div></div></div>'
+    + (s.programme ? '<div class="mus-last" style="margin:10px 0 0">Programme : <strong>' + musEsc(s.programme) + '</strong></div>' : '') + '</div>';
+  h += '<div class="mus-card">';
+  for (var i = 0; i < s.exos.length; i++) h += '<div class="mus-perf"><span><span class="mus-dot" style="background:' + musGroupColor(s.exos[i].groupe) + '"></span> ' + musEsc(s.exos[i].nom) + '</span><span>' + musFmtSeries(s.exos[i].series) + '</span></div>';
+  h += '</div>';
+  h += '<button type="button" class="mus-btn mus-btn-sec" data-a="redo" data-v="' + musEsc(s.id) + '">Refaire cette séance</button>';
+  h += '<button type="button" class="mus-btn mus-btn-ghost" data-a="sess-del" data-v="' + musEsc(s.id) + '">' + musConfirmLabel('sess-del', 'Supprimer cette séance') + '</button>';
+  return h;
+}
+
+// ── Événements (délégation, attachés une seule fois) ──
+function musToast(msg) { if (typeof ohToast === 'function') ohToast(msg); }
+function musBind(cont) {
+  if (_mus.bound) return; _mus.bound = true;
+  cont.addEventListener('click', function(ev) {
+    var el = ev.target;
+    while (el && el !== cont && !(el.getAttribute && el.getAttribute('data-a'))) el = el.parentNode;
+    if (!el || el === cont) return;
+    musAction(el.getAttribute('data-a'), el);
+  });
+  cont.addEventListener('change', function(ev) {
+    var t = ev.target; if (!t) return;
+    if (t.id === 'mus-compet-nom' || t.id === 'mus-compet-date') {
+      var c = musLoadCompet();
+      if (t.id === 'mus-compet-nom') c.nom = String(t.value).replace(/\s+/g, ' ').trim().slice(0, 60);
+      else c.date = /^\d{4}-\d{2}-\d{2}$/.test(t.value) && isFinite(musDaysTo(t.value)) ? t.value : '';
+      musSet('oh_muscu_compet', c); ohMuscuRender(); return;
+    }
+    if (t.id === 'mus-lieu') { var cl = musLoadCurrent(); if (cl) { cl.lieu = MUS_LIEUX.indexOf(t.value) !== -1 ? t.value : ''; musSaveCurrent(cl); } return; }
+    if (t.id === 'mus-max') {
+      var mx = musNum(t.value); mx = (mx > 0) ? Math.round(musClamp(mx, 1, 500) * 2) / 2 : null;
+      musSet('oh_muscu_max', mx); ohMuscuRender(); return;
+    }
+    if (!t.classList || !t.classList.contains('mus-input')) return;
+    musInputCommit(t);
+  });
+  cont.addEventListener('input', function(ev) {
+    var t = ev.target; if (!t || t.id !== 'mus-search') return;
+    _mus.libQuery = t.value; _mus.libGroup = null; _mus.libEquip = '';
+    var body = document.getElementById('mus-lib-body'); if (body) body.innerHTML = musLibBody();
+  });
+}
+function musFieldLimits(f) { return f === 'kg' ? [0, 500] : [0, 100]; }
+function musInputCommit(t) {
+  var cur = musLoadCurrent(); if (!cur) return;
+  var f = t.getAttribute('data-f'), i = +t.getAttribute('data-i'), j = +t.getAttribute('data-j');
+  if (!cur.exos[i] || !cur.exos[i].series[j] || (f !== 'kg' && f !== 'reps')) return;
+  var n = musNum(t.value), lim = musFieldLimits(f);
+  if (isFinite(n)) { n = musClamp(n, lim[0], lim[1]); if (f === 'reps') n = Math.round(n); else n = Math.round(n * 100) / 100; }
+  cur.exos[i].series[j][f] = isFinite(n) ? n : null;
+  t.value = isFinite(n) ? String(n).replace('.', ',') : '';
+  if (f === 'reps' && !(n > 0) && cur.exos[i].series[j].fait) { cur.exos[i].series[j].fait = false; musSaveCurrent(cur); ohMuscuRender(); return; }
+  musSaveCurrent(cur);
+}
+function musAction(a, el) {
+  var prev = _mus.confirm; _mus.confirm = null;
+  var v = el.getAttribute('data-v'), i = +el.getAttribute('data-i'), j = +el.getAttribute('data-j');
+  var cur = musLoadCurrent(), ss, k;
+  function need(key) { if (prev === key) return true; _mus.confirm = key; ohMuscuRender(); return false; }
+
+  if (a === 'tab') { _mus.tab = v; _mus.exo = null; _mus.detail = null; _mus.flash = null; _mus.panel = null; _mus.menu = null; _mus.newOpen = false; }
+  else if (a === 'panel') { _mus.panel = v || null; _mus.srcOpen = false; }
+  else if (a === 'menu') { _mus.menu = (_mus.menu === i) ? null : i; }
+  else if (a === 'new-open') { _mus.newOpen = true; }
+  else if (a === 'start') { musStart(null); _mus.tab = 'seance'; _mus.panel = null; _mus.menu = null; }
+  else if (a === 'redo') {
+    if (cur) { musToast('Termine ou abandonne d\'abord la séance en cours'); _mus.tab = 'seance'; }
+    else { ss = musLoadSessions(); for (k = 0; k < ss.length; k++) if (ss[k].id === v) { musStart(ss[k]); break; } _mus.tab = 'seance'; _mus.detail = null; _mus.flash = null; }
+  }
+  else if (a === 'obj') {
+    if (!musObjById(v)) return;
+    var nv = (musGet('oh_muscu_objectif', '') === v) ? '' : v;
+    musSet('oh_muscu_objectif', nv); if (cur) { cur.objectif = nv; musSaveCurrent(cur); } _mus.objOpen = false;
+  }
+  else if (a === 'prog-open') { _mus.progOpen = !_mus.progOpen; }
+  else if (a === 'phase') { if (!MUS_PROG[v]) return; musSet('oh_muscu_phase', v); }
+  else if (a === 'max-est') { var me = musMaxEstime(); if (!isFinite(me)) return; musSet('oh_muscu_max', me); }
+  else if (a === 'prog-start') {
+    if (cur) { musToast('Termine ou abandonne d\'abord la séance en cours'); }
+    else {
+      if (!musStartProg(v, i)) return;
+      if (!isFinite(musMax())) musToast('Indique ton max pour calculer les charges');
+    }
+    _mus.tab = 'seance'; _mus.panel = null; _mus.menu = null;
+  }
+  else if (a === 'src-open') { _mus.srcOpen = !_mus.srcOpen; }
+  else if (a === 'obj-open') { _mus.objOpen = !_mus.objOpen; }
+  else if (a === 'compet-clear') { try { localStorage.removeItem('oh_muscu_compet'); } catch(e) {} }
+  else if (a === 'lieu') { if (cur) { cur.lieu = (cur.lieu === v) ? '' : v; musSaveCurrent(cur); } }
+  else if (a === 'step') {
+    if (!cur || !cur.exos[i] || !cur.exos[i].series[j]) return;
+    var f = el.getAttribute('data-f'), d = +el.getAttribute('data-d'), s = cur.exos[i].series[j];
+    var pas = f === 'kg' ? musStep(cur.exos[i].equip) : 1, lim = musFieldLimits(f), val = musNum(s[f]);
+    val = musClamp((isFinite(val) ? val : 0) + d * pas, lim[0], lim[1]);
+    s[f] = Math.round(val * 100) / 100;
+    var wasDone = s.fait; if (f === 'reps' && !(s.reps > 0)) s.fait = false;
+    musSaveCurrent(cur);
+    var inp = document.getElementById('mus-' + f + '-' + i + '-' + j);
+    if (inp && wasDone === s.fait) { inp.value = String(s[f]).replace('.', ','); return; }
+  }
+  else if (a === 'check') {
+    if (!cur || !cur.exos[i] || !cur.exos[i].series[j]) return;
+    var st = cur.exos[i].series[j];
+    if (!st.fait && !(musNum(st.reps) > 0)) { musToast('Indique d\'abord le nombre de répétitions'); return; }
+    st.fait = !st.fait; if (st.fait && !isFinite(musNum(st.kg))) st.kg = 0;
+    musSaveCurrent(cur);
+  }
+  else if (a === 'set-add') {
+    if (!cur || !cur.exos[i]) return;
+    if (cur.exos[i].series.length >= 12) { musToast('12 séries maximum par exercice'); return; }
+    var last = cur.exos[i].series[cur.exos[i].series.length - 1] || { kg: null, reps: null };
+    cur.exos[i].series.push({ kg: last.kg, reps: last.reps, fait: false }); musSaveCurrent(cur);
+  }
+  else if (a === 'set-del') { if (!cur || !cur.exos[i] || cur.exos[i].series.length < 2) return; cur.exos[i].series.pop(); musSaveCurrent(cur); }
+  else if (a === 'sug') {
+    if (!cur || !cur.exos[i]) return;
+    var sg = musSuggest(cur.exos[i].id, cur.exos[i].equip); if (!sg) return;
+    for (k = 0; k < cur.exos[i].series.length; k++) if (!cur.exos[i].series[k].fait) { if (sg.type !== 'reps') cur.exos[i].series[k].kg = sg.kg; if (sg.type !== 'kg') cur.exos[i].series[k].reps = sg.reps; }
+    musSaveCurrent(cur); musToast('Suggestion appliquée aux séries restantes');
+  }
+  else if (a === 'exo-del') { if (!cur || !cur.exos[i]) return; if (!need('exo-del-' + i)) return; cur.exos.splice(i, 1); musSaveCurrent(cur); _mus.menu = null; }
+  else if (a === 'pick-add') { _mus.pick = { type: 'add' }; _mus.libGroup = null; _mus.libEquip = ''; _mus.libQuery = ''; }
+  else if (a === 'pick-swap') { if (!cur || !cur.exos[i]) return; _mus.pick = { type: 'swap', i: i }; _mus.menu = null; _mus.libGroup = cur.exos[i].groupe; _mus.libEquip = ''; _mus.libQuery = ''; }
+  else if (a === 'pick-cancel') { _mus.pick = null; _mus.tab = 'seance'; }
+  else if (a === 'group') { _mus.libGroup = v || null; _mus.libEquip = ''; }
+  else if (a === 'equip') { _mus.libEquip = v || ''; }
+  else if (a === 'exo') {
+    var ex = musFindExo(v); if (!ex) return;
+    if (_mus.pick) {
+      if (!cur) cur = musStart(null);
+      if (cur.exos.some(function(e){ return e.id === ex.id; })) { musToast('Cet exercice est déjà dans ta séance'); _mus.confirm = null; return; }
+      if (_mus.pick.type === 'swap' && cur.exos[_mus.pick.i]) cur.exos[_mus.pick.i] = musMakeEntry(ex);
+      else { if (cur.exos.length >= 30) { musToast('30 exercices maximum par séance'); return; } cur.exos.push(musMakeEntry(ex)); }
+      musSaveCurrent(cur); _mus.pick = null; _mus.tab = 'seance';
+    } else _mus.exo = v;
+  }
+  else if (a === 'exo-back') { _mus.exo = null; }
+  else if (a === 'exo-add') {
+    var e2 = musFindExo(v); if (!e2) return;
+    if (!cur) cur = musStart(null);
+    if (cur.exos.some(function(e){ return e.id === e2.id; })) musToast('Cet exercice est déjà dans ta séance');
+    else if (cur.exos.length >= 30) { musToast('30 exercices maximum par séance'); return; }
+    else { cur.exos.push(musMakeEntry(e2)); musSaveCurrent(cur); }
+    _mus.exo = null; _mus.tab = 'seance';
+  }
+  else if (a === 'custom-add') {
+    var nomEl = document.getElementById('mus-new-nom'), eqEl = document.getElementById('mus-new-equip');
+    var nom = nomEl ? String(nomEl.value).replace(/\s+/g, ' ').trim().slice(0, 60) : '', eq = eqEl && MUS_EQUIP[eqEl.value] ? eqEl.value : 'M';
+    if (nom.length < 2 || !musSlug(nom)) { musToast('Donne un nom à l\'exercice'); return; }
+    if (!_mus.libGroup) return;
+    var nid = _mus.libGroup + '-' + musSlug(nom);
+    if (musFindExo(nid)) { musToast('Cet exercice existe déjà'); return; }
+    var cu = musLoadCustom(); if (cu.length >= 100) { musToast('100 exercices perso maximum'); return; }
+    cu.push({ id: nid, nom: nom, groupe: _mus.libGroup, equip: eq }); musSet('oh_muscu_custom', cu); _mus.newOpen = false; musToast('Exercice ajouté');
+  }
+  else if (a === 'custom-del') { if (!need('custom-del')) return; musSet('oh_muscu_custom', musLoadCustom().filter(function(x){ return x.id !== v; }).map(function(x){ return { id: x.id, nom: x.nom, groupe: x.groupe, equip: x.equip }; })); _mus.exo = null; }
+  else if (a === 'finish') {
+    var done = musFinish();
+    if (!done) { musToast('Valide au moins une série (✓) avant de terminer'); return; }
+    _mus.tab = 'hist'; _mus.detail = done.id; _mus.flash = done.id;
+  }
+  else if (a === 'abandon') { if (!need('abandon')) return; musSaveCurrent(null); _mus.pick = null; _mus.menu = null; }
+  else if (a === 'detail') { _mus.tab = 'hist'; _mus.detail = v; _mus.flash = null; }
+  else if (a === 'detail-back') { _mus.detail = null; _mus.flash = null; }
+  else if (a === 'sess-del') { if (!need('sess-del')) return; musSaveSessions(musLoadSessions().filter(function(x){ return x.id !== v; })); _mus.detail = null; _mus.flash = null; }
+  else return;
+  ohMuscuRender();
+}
+
 </script>
 </body>
 </html>
@@ -5630,6 +6381,126 @@ function pdcLogSave() {
 #pdc-team-tbl input, #pdc-team-tbl select { min-height: 38px; font-size: 0.85rem; }
 #pdc-team-tbl td, #pdc-team-tbl th { text-align: left; vertical-align: middle; }
 #pdc-team-tbl td.pdc-pts { text-align: right; font-weight: 800; }
+
+/* ══ MODULE MUSCULATION ══ */
+.app-nav .nav-item { min-width: 0; }
+.app-nav .nav-item span { white-space: nowrap; }
+@media (max-width: 359px) { .app-nav .nav-item { font-size: 0.54rem; padding-left: 0.1rem; padding-right: 0.1rem; } }
+.mus-wrap { padding: 0 0 2rem; }
+.mus-tabs { display: flex; gap: 5px; background: var(--white); border: 1px solid var(--border); border-radius: 12px; padding: 4px; margin-bottom: 14px; }
+.mus-tab { flex: 1; min-height: 44px; border: 0; border-radius: 9px; background: transparent; color: var(--muted); font: 600 0.85rem var(--font); cursor: pointer; }
+.mus-tab.active { background: var(--green); color: #fff; }
+.mus-card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 14px; margin-bottom: 12px; box-shadow: var(--shadow-sm); }
+.mus-card-title { font-size: 0.7rem; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 10px; }
+.mus-hero-title { font-size: 1.25rem; font-weight: 800; color: var(--text); letter-spacing: -0.02em; }
+.mus-note { font-size: 0.82rem; color: var(--text2); margin: 4px 0 12px; line-height: 1.45; }
+.mus-btn { display: block; width: 100%; min-height: 48px; border-radius: 12px; font: 700 0.95rem var(--font); cursor: pointer; margin-top: 8px; padding: 0 14px; }
+.mus-btn-main { background: var(--green); color: #fff; border: 0; box-shadow: 0 4px 12px rgba(0,200,150,0.3); }
+.mus-btn-sec { background: var(--bg); color: var(--text); border: 1.5px solid var(--border); }
+.mus-btn-ghost { background: transparent; color: var(--muted); border: 0; font-weight: 600; font-size: 0.85rem; }
+.mus-link { min-height: 44px; padding: 0 8px; background: none; border: 0; color: var(--green); font: 700 0.85rem var(--font); cursor: pointer; }
+.mus-link-muted { color: var(--muted); }
+.mus-stats { display: flex; gap: 8px; }
+.mus-stats > div { flex: 1; min-width: 0; text-align: center; background: var(--bg); border-radius: 10px; padding: 10px 4px; }
+.mus-stat-val { font-size: 1.25rem; font-weight: 800; color: var(--text); font-variant-numeric: tabular-nums; }
+.mus-stat-lbl { font-size: 0.68rem; color: var(--muted); font-weight: 600; }
+.mus-row { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 52px; padding: 8px 0; background: none; border: 0; border-bottom: 1px solid var(--border); text-align: left; cursor: pointer; color: var(--text); font-family: var(--font); }
+.mus-row:last-child { border-bottom: 0; }
+.mus-row-main { flex: 1; min-width: 0; }
+.mus-row-title { font-size: 0.92rem; font-weight: 700; color: var(--text); }
+.mus-row-sub { font-size: 0.75rem; font-weight: 500; color: var(--muted); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mus-chev { color: var(--muted); font-size: 1.3rem; flex: 0 0 auto; }
+.mus-list { padding: 4px 14px; }
+.mus-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; flex: 0 0 auto; }
+.mus-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 4px; }
+.mus-chip { min-height: 44px; padding: 0 12px; border-radius: 99px; border: 1.5px solid var(--border); background: var(--bg); color: var(--text2); font: 600 0.8rem var(--font); cursor: pointer; }
+.mus-chip.active { background: var(--text); color: var(--white); border-color: var(--text); }
+.mus-empty { text-align: center; color: var(--muted); font-size: 0.88rem; padding: 2rem 1rem; line-height: 1.5; }
+.mus-banner { display: flex; align-items: center; justify-content: space-between; gap: 8px; background: var(--green-light); color: #06694f; border-radius: 12px; padding: 4px 6px 4px 14px; margin-bottom: 12px; font-size: 0.88rem; }
+.mus-flash { background: var(--green-light); color: #06694f; border-radius: 12px; padding: 12px 14px; margin-bottom: 12px; font-weight: 700; font-size: 0.9rem; }
+.mus-search { width: 100%; min-height: 46px; border: 1.5px solid var(--border); border-radius: 12px; background: var(--card); color: var(--text); font: 500 16px var(--font); padding: 0 12px; margin-bottom: 10px; }
+.mus-search:focus, .mus-input:focus { border-color: var(--green); outline: none; }
+.mus-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.mus-group { position: relative; overflow: hidden; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; min-height: 68px; padding: 10px 12px 10px 18px; background: var(--card); border: 1px solid var(--border); border-radius: 14px; cursor: pointer; text-align: left; font-family: var(--font); box-shadow: var(--shadow-sm); }
+.mus-group-bar { position: absolute; left: 0; top: 0; bottom: 0; width: 6px; }
+.mus-group-name { font-size: 0.95rem; font-weight: 800; color: var(--text); }
+.mus-group-n { font-size: 0.72rem; color: var(--muted); font-weight: 600; margin-top: 2px; }
+.mus-lib-head { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; color: var(--text); }
+.mus-exo-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.mus-exo-name { font-size: 1rem; font-weight: 800; color: var(--text); min-width: 0; }
+.mus-last { font-size: 0.78rem; color: var(--text2); background: var(--bg); border-radius: 8px; padding: 7px 10px; margin-bottom: 8px; }
+.mus-sug { display: block; width: 100%; min-height: 40px; text-align: left; font: 700 0.8rem var(--font); color: #06694f; background: var(--green-light); border: 0; border-radius: 8px; padding: 0 10px; margin-bottom: 10px; cursor: pointer; }
+.mus-set-head, .mus-set { display: grid; grid-template-columns: 22px 1fr 1fr 46px; gap: 6px; align-items: center; }
+.mus-set-head { font-size: 0.66rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; text-align: center; margin-bottom: 4px; }
+.mus-set { margin-bottom: 6px; }
+.mus-set-n { font-size: 0.8rem; font-weight: 800; color: var(--muted); text-align: center; }
+.mus-stepper { display: flex; align-items: stretch; min-width: 0; border: 1.5px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--bg); }
+.mus-step { flex: 0 0 34px; min-height: 44px; border: 0; background: transparent; color: var(--text2); font: 700 1.2rem var(--font); cursor: pointer; padding: 0; }
+.mus-step:active { background: var(--border); }
+.mus-input { flex: 1; min-width: 0; width: 100%; border: 0; border-radius: 0; background: transparent; color: var(--text); font: 700 16px var(--font); text-align: center; padding: 0; font-variant-numeric: tabular-nums; }
+.mus-check { width: 46px; min-height: 44px; border-radius: 10px; border: 1.5px solid var(--border); background: var(--bg); color: var(--muted); font: 800 1.1rem var(--font); cursor: pointer; }
+.mus-check.on { background: var(--green); border-color: var(--green); color: #fff; }
+.mus-set.done .mus-stepper { border-color: var(--green); background: var(--green-light); }
+.mus-set.done .mus-input, .mus-set.done .mus-step { color: #06694f; }
+.mus-exo-actions { display: flex; flex-wrap: wrap; justify-content: space-between; margin-top: 4px; }
+.mus-perf { display: flex; justify-content: space-between; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--border); font-size: 0.82rem; color: var(--text); }
+.mus-perf:last-child { border-bottom: 0; }
+.mus-perf > span:first-child { font-weight: 700; }
+.mus-perf > span:last-child { color: var(--text2); text-align: right; font-variant-numeric: tabular-nums; }
+@media (prefers-color-scheme: dark) {
+  .mus-banner, .mus-flash, .mus-sug { color: #7ff0cf; background: rgba(0,200,150,0.16); }
+  .mus-set.done .mus-stepper { background: rgba(0,200,150,0.16); }
+  .mus-set.done .mus-input, .mus-set.done .mus-step { color: #7ff0cf; }
+}
+/* Notification : invisible au repos (elle dépassait sur la barre du bas) et lisible en mode sombre */
+.toast { opacity: 0; color: var(--white); transition: transform 0.3s cubic-bezier(0.34,1.56,0.64,1), opacity 0.2s; }
+.toast.show { opacity: 1; }
+/* Objectif et compétition */
+.mus-obj-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.mus-obj { position: relative; min-height: 52px; padding: 6px 8px; border-radius: 12px; border: 1.5px solid var(--border); background: var(--bg); color: var(--text); font: 700 0.86rem var(--font); cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; }
+.mus-obj.active { background: var(--green); border-color: var(--green); color: #fff; }
+.mus-obj-rec { font-size: 0.62rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #06694f; background: var(--green-light); border-radius: 99px; padding: 1px 7px; }
+.mus-obj.active .mus-obj-rec { color: #06694f; background: #fff; }
+.mus-obj-detail { margin-top: 10px; font-size: 0.82rem; color: var(--text2); line-height: 1.45; }
+.mus-obj-facts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.mus-obj-facts span { background: var(--bg); border-radius: 8px; padding: 5px 9px; font-size: 0.76rem; color: var(--text2); }
+.mus-obj-facts strong { color: var(--text); }
+.mus-compet { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 12px; }
+.mus-compet-j { flex: 0 0 auto; max-width: 45%; background: var(--text); color: var(--white); border-radius: 10px; padding: 8px 10px; font-size: 0.86rem; font-weight: 800; text-align: center; font-variant-numeric: tabular-nums; }
+.mus-compet-form .mus-search { background: var(--bg); }
+@media (prefers-color-scheme: dark) { .mus-obj-rec { color: #7ff0cf; background: rgba(0,200,150,0.16); } }
+.mus-obj-line { display: flex; align-items: center; gap: 4px; margin-top: 10px; }
+.mus-compet { flex-direction: column; gap: 8px; }
+.mus-compet-j { max-width: none; white-space: nowrap; align-self: flex-start; }
+/* Sources scientifiques */
+.mus-obj-src { margin-top: 8px; font-size: 0.76rem; color: var(--text2); line-height: 1.45; }
+.mus-sources { margin-top: 4px; }
+.mus-source { display: block; min-height: 44px; padding: 9px 0; border-top: 1px solid var(--border); text-decoration: none; color: var(--text2); font-size: 0.78rem; line-height: 1.4; }
+.mus-source strong { display: block; color: var(--green); font-size: 0.82rem; }
+/* Programme type */
+.mus-max { display: block; margin-bottom: 4px; }
+.mus-max span { display: block; font-size: 0.75rem; font-weight: 700; color: var(--muted); margin-bottom: 5px; }
+.mus-max .mus-search { background: var(--bg); margin-bottom: 4px; }
+.mus-prog { border-top: 1px solid var(--border); padding: 12px 0 4px; margin-top: 8px; }
+.mus-prog .mus-perf { font-size: 0.8rem; padding: 7px 0; }
+/* Interface allégée */
+.mus-btn-big { min-height: 60px; font-size: 1.05rem; margin-top: 0; }
+.mus-nav { min-height: 56px; }
+.mus-nav-lbl { font-size: 0.92rem; font-weight: 700; color: var(--text); flex: 0 0 auto; }
+.mus-nav-val { flex: 1; min-width: 0; text-align: right; font-size: 0.88rem; font-weight: 600; color: var(--green); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mus-more { flex: 0 0 44px; margin-left: auto; min-height: 44px; border: 0; background: none; color: var(--muted); font: 800 1.4rem var(--font); cursor: pointer; border-radius: 10px; }
+.mus-exo-name { flex: 1; }
+.mus-exo-actions { justify-content: flex-start; gap: 6px; background: var(--bg); border-radius: 10px; margin: 0 0 10px; padding: 0 4px; }
+.mus-compet { flex-direction: row; align-items: center; gap: 12px; }
+.mus-compet-j { align-self: auto; }
+.mus-obj-facts { margin-top: 12px; }
+.mus-sug { min-height: 44px; }
+@media (max-width: 359px) {
+  .mus-exo { padding: 10px; }
+  .mus-step { flex-basis: 28px; }
+  .mus-set-head, .mus-set { grid-template-columns: 16px 1fr 1fr 44px; gap: 4px; }
+}
+
 </style>
 
 <!-- Journal alimentaire (injecté par JS) -->
