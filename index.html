@@ -5010,13 +5010,15 @@ function pdcPanelHist() {
       var dateStr=entry.date||'';
       var headLabel=dateStr;
       try{var dp=pdcParseKey(dateStr);headLabel=pdcPad(dp.d)+'/'+pdcPad(dp.m)+'/'+dp.y;}catch(e){}
-      var bestStr=isFinite(entry.best&&entry.best.est)?pdcFmtKg(entry.best.est)+' kg':'';
+      var pb=entry.best||{};
+      var bestStr=(pb.kg>0)?pdcFmtKg(pb.kg)+' kg × '+(pb.reps||1):'';
+      if(pb.est>0) bestStr+='<div style="font-size:0.68rem;font-weight:600;color:var(--muted);text-align:right">max estimé '+pdcFmtKg(pb.est)+' kg</div>';
       h+='<div class="pdc-hist-entry"><div class="pdc-hist-head" data-pdc-hist="'+idx+'">';
       h+='<div class="pdc-hist-date">'+headLabel+(entry.ref?' · réf: '+pdcFmtKg(entry.ref)+' kg':'')+'</div>';
       h+='<div class="pdc-hist-best">'+bestStr+'</div><div class="pdc-hist-chev">▼</div></div>';
       h+='<div class="pdc-hist-body" id="pdc-hbody-'+idx+'">';
       entry.sets.forEach(function(s,si){
-        h+='<div class="pdc-hist-set"><span class="pdc-hist-badge">S'+(si+1)+'</span>'+pdcFmtKg(s.kg)+' kg × '+s.reps+' rép. → <b>'+pdcFmt(pdcEst(s.kg,s.reps))+' kg</b></div>';
+        h+='<div class="pdc-hist-set"><span class="pdc-hist-badge">S'+(si+1)+'</span>'+pdcFmtKg(s.kg)+' kg × '+s.reps+' rép.'+(isFinite(pdcEst(s.kg,s.reps))?' → max estimé <b>'+pdcFmt(pdcEst(s.kg,s.reps))+' kg</b>':'')+'</div>';
       });
       if(entry.notes) h+='<div class="pdc-hist-notes">'+entry.notes+'</div>';
       h+='</div></div>';
