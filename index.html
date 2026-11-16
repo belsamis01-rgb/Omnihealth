@@ -1653,6 +1653,11 @@ function ohInitWithSupabase() {
   <div id="pdc-content"></div>
 </div>
 
+<!-- ── PAGE SÉANCES ── -->
+<div class="page" id="page-seances" role="tabpanel">
+  <div id="seances-content"></div>
+</div>
+
 <!-- ═══════════════════════════════════════════
      SCRIPTS
 ════════════════════════════════════════════ -->
@@ -4644,7 +4649,7 @@ function ohSwitchPage(id) {
     }
   }
   window.scrollTo(0, 0);
-  var renders = { today: ohTodayRender, suivi: ohSuiviRender, defis: ohDefisRender, moi: ohMoiRender, paradc: ohParaDCRender, muscu: ohMuscuRender };
+  var renders = { today: ohTodayRender, suivi: ohSuiviRender, defis: ohDefisRender, moi: ohMoiRender, paradc: ohParaDCRender, muscu: ohMuscuRender, seances: ohSeancesRender };
   if (renders[id]) setTimeout(renders[id], 30);
 }
 
@@ -6545,6 +6550,565 @@ function ohFoodOnlineBlock() {
       + '<div class="of-note">Données : Open Food Facts</div>';
   }
   return h + '</div>';
+}
+
+
+// ═══════════════════════════════════════════
+//  MODULE SÉANCES (injected)
+// ═══════════════════════════════════════════
+// ═══════════════════════════════════════════
+//  MODULE SÉANCES — OmniHealth
+// ═══════════════════════════════════════════
+
+var OH_SEANCES_CATALOGUE = {
+  pectoraux: {
+    label: 'Pectoraux', icon: '💪',
+    exos: [
+      { id: 'pec_dc_barre',    nom: 'Développé couché barre',    variante: '' },
+      { id: 'pec_dc_halt',     nom: 'Développé couché haltères', variante: '' },
+      { id: 'pec_incline',     nom: 'Développé incliné',         variante: '' },
+      { id: 'pec_decline',     nom: 'Développé décliné',         variante: '' },
+      { id: 'pec_ecartes',     nom: 'Écarté haltères',           variante: '' },
+      { id: 'pec_ecartes_inc', nom: 'Écarté incliné',            variante: '' },
+      { id: 'pec_butterfly',   nom: 'Butterfly (Peck deck)',      variante: '' },
+      { id: 'pec_croise',      nom: 'Croisé poulie',              variante: '' },
+      { id: 'pec_dips',        nom: 'Dips pectoraux',             variante: '' },
+      { id: 'pec_pompes',      nom: 'Pompes',                     variante: '' }
+    ]
+  },
+  dos: {
+    label: 'Dos', icon: '🏋️',
+    exos: [
+      { id: 'dos_tractions',   nom: 'Tractions',                  variante: '' },
+      { id: 'dos_lat',         nom: 'Tirage vertical (Lat)',       variante: '' },
+      { id: 'dos_rowing_bar',  nom: 'Rowing barre',                variante: '' },
+      { id: 'dos_rowing_halt', nom: 'Rowing haltère',              variante: '' },
+      { id: 'dos_rowing_cab',  nom: 'Rowing câble',                variante: '' },
+      { id: 'dos_rowing_mac',  nom: 'Rowing machine',              variante: '' },
+      { id: 'dos_sdd',         nom: 'Soulevé de terre',            variante: '' },
+      { id: 'dos_tir_horiz',   nom: 'Tirage horizontal',           variante: '' },
+      { id: 'dos_pullover',    nom: 'Pull-over',                   variante: '' },
+      { id: 'dos_hyperext',    nom: 'Hyperextension lombaires',    variante: '' }
+    ]
+  },
+  epaules: {
+    label: 'Épaules', icon: '🤸',
+    exos: [
+      { id: 'ep_dev_mil',  nom: 'Développé militaire',       variante: '' },
+      { id: 'ep_dev_halt', nom: 'Développé haltères assis',  variante: '' },
+      { id: 'ep_arnold',   nom: 'Arnold press',              variante: '' },
+      { id: 'ep_lat',      nom: 'Élévations latérales',      variante: '' },
+      { id: 'ep_front',    nom: 'Élévations frontales',      variante: '' },
+      { id: 'ep_oiseau',   nom: 'Oiseau',                    variante: '' },
+      { id: 'ep_facepull', nom: 'Face pull',                 variante: '' },
+      { id: 'ep_menton',   nom: 'Tirage menton',             variante: '' },
+      { id: 'ep_hausst',   nom: "Haussements d'épaules",     variante: '' }
+    ]
+  },
+  biceps: {
+    label: 'Biceps', icon: '💪',
+    exos: [
+      { id: 'bi_barre',   nom: 'Curl barre',           variante: '' },
+      { id: 'bi_ez',      nom: 'Curl barre EZ',         variante: '' },
+      { id: 'bi_halt',    nom: 'Curl haltères',         variante: '' },
+      { id: 'bi_marteau', nom: 'Curl marteau',          variante: '' },
+      { id: 'bi_concent', nom: 'Curl concentration',    variante: '' },
+      { id: 'bi_cable',   nom: 'Curl câble',            variante: '' },
+      { id: 'bi_mac',     nom: 'Curl machine',          variante: '' },
+      { id: 'bi_incline', nom: 'Curl incliné',          variante: '' }
+    ]
+  },
+  triceps: {
+    label: 'Triceps', icon: '💪',
+    exos: [
+      { id: 'tri_dips',   nom: 'Dips triceps',           variante: '' },
+      { id: 'tri_nuque',  nom: 'Extension nuque',         variante: '' },
+      { id: 'tri_push',   nom: 'Pushdown câble',          variante: '' },
+      { id: 'tri_corde',  nom: 'Pushdown corde',          variante: '' },
+      { id: 'tri_kick',   nom: 'Kickback',                variante: '' },
+      { id: 'tri_skull',  nom: 'Skull crusher',           variante: '' },
+      { id: 'tri_ext',    nom: 'Extension câble tête',    variante: '' },
+      { id: 'tri_mac',    nom: 'Dips machine',            variante: '' }
+    ]
+  },
+  jambes: {
+    label: 'Jambes', icon: '🦵',
+    exos: [
+      { id: 'jam_squat',     nom: 'Squat',                variante: '' },
+      { id: 'jam_sumo',      nom: 'Squat sumo',           variante: '' },
+      { id: 'jam_legpress',  nom: 'Leg press',            variante: '' },
+      { id: 'jam_fentes',    nom: 'Fentes avant',         variante: '' },
+      { id: 'jam_fentlat',   nom: 'Fentes latérales',     variante: '' },
+      { id: 'jam_rdl',       nom: 'Romanian deadlift',    variante: '' },
+      { id: 'jam_legcurl',   nom: 'Leg curl',             variante: '' },
+      { id: 'jam_legext',    nom: 'Leg extension',        variante: '' },
+      { id: 'jam_mollets',   nom: 'Mollets debout',       variante: '' },
+      { id: 'jam_molassis',  nom: 'Mollets assis',        variante: '' },
+      { id: 'jam_hipthrust', nom: 'Hip thrust',           variante: '' },
+      { id: 'jam_goodmorn',  nom: 'Good morning',         variante: '' }
+    ]
+  },
+  abdos: {
+    label: 'Abdos', icon: '🔥',
+    exos: [
+      { id: 'ab_crunch',   nom: 'Crunch',              variante: '' },
+      { id: 'ab_crcable',  nom: 'Crunch câble',         variante: '' },
+      { id: 'ab_planche',  nom: 'Planche',              variante: '' },
+      { id: 'ab_planclat', nom: 'Planche latérale',     variante: '' },
+      { id: 'ab_releve',   nom: 'Relevé de jambes',     variante: '' },
+      { id: 'ab_russian',  nom: 'Russian twist',        variante: '' },
+      { id: 'ab_gainage',  nom: 'Gainage dynamique',    variante: '' },
+      { id: 'ab_roller',   nom: 'Ab roller',            variante: '' },
+      { id: 'ab_mountain', nom: 'Mountain climbers',    variante: '' },
+      { id: 'ab_vups',     nom: 'V-ups',                variante: '' }
+    ]
+  },
+  cardio: {
+    label: 'Cardio', icon: '❤️',
+    exos: [
+      { id: 'car_ergo',     nom: 'Ergomètre bras',        variante: '' },
+      { id: 'car_velo',     nom: 'Vélo / Spinning',        variante: '' },
+      { id: 'car_tapis',    nom: 'Tapis de course',        variante: '' },
+      { id: 'car_rameur',   nom: 'Rameur',                 variante: '' },
+      { id: 'car_ellip',    nom: 'Elliptique',             variante: '' },
+      { id: 'car_prop',     nom: 'Propulsion fauteuil',    variante: '' },
+      { id: 'car_natation', nom: 'Natation',               variante: '' },
+      { id: 'car_libre',    nom: 'Cardio libre (chrono)',  variante: '' }
+    ]
+  }
+};
+
+// ── State ──
+var _ohSeancesZoneActive = null;
+var _ohSeancesExoActif   = null;
+var _ohSeancesVue        = 'accueil';
+var _ohSeanceEnCours     = null;
+var _ohSeancesRPE        = null;
+
+// ── Storage ──
+var OH_SEANCES_LS = 'oh_seances_data';
+
+function ohSeancesGetData() {
+  try {
+    var raw = localStorage.getItem(OH_SEANCES_LS);
+    if (!raw) return { seances: [], exos_perso: [] };
+    var d = JSON.parse(raw);
+    if (!d.seances) d.seances = [];
+    if (!d.exos_perso) d.exos_perso = [];
+    return d;
+  } catch(e) { return { seances: [], exos_perso: [] }; }
+}
+
+function ohSeancesSaveData(d) {
+  try { localStorage.setItem(OH_SEANCES_LS, JSON.stringify(d)); } catch(e) {}
+}
+
+function ohSeancesOuvrirOuCreer() {
+  var today = new Date().toISOString().slice(0,10);
+  var d = ohSeancesGetData();
+  for (var i = 0; i < d.seances.length; i++) {
+    if (d.seances[i].date === today && !d.seances[i].cloturee) {
+      _ohSeanceEnCours = d.seances[i]; return;
+    }
+  }
+  var s = { id: 'se_' + Date.now(), date: today, series: [], cloturee: false };
+  d.seances.push(s);
+  ohSeancesSaveData(d);
+  _ohSeanceEnCours = s;
+}
+
+function ohSeancesAjouterSerie(exoId, exoNom, zoneId, charge, reps, effort, typeCardio, dureeMin, distKm) {
+  if (!_ohSeanceEnCours) return;
+  var serie = {
+    id: 'sr_' + Date.now() + '_' + Math.floor(Math.random()*10000),
+    exoId: exoId, exoNom: exoNom, zone: zoneId,
+    typeCardio: typeCardio ? true : false,
+    ts: Date.now()
+  };
+  if (typeCardio) {
+    serie.dureeMin = dureeMin  ? parseFloat(dureeMin)  : null;
+    serie.distKm   = distKm    ? parseFloat(distKm)    : null;
+  } else {
+    var c = parseFloat(charge);
+    serie.charge = (charge !== '' && charge !== null && charge !== undefined && !isNaN(c)) ? c : null;
+    serie.reps   = reps ? parseInt(reps, 10) : null;
+  }
+  serie.effort = (effort !== null && effort !== undefined && effort !== '') ? parseInt(effort, 10) : null;
+  _ohSeanceEnCours.series.push(serie);
+  var d = ohSeancesGetData();
+  for (var i = 0; i < d.seances.length; i++) {
+    if (d.seances[i].id === _ohSeanceEnCours.id) { d.seances[i] = _ohSeanceEnCours; break; }
+  }
+  ohSeancesSaveData(d);
+}
+
+function ohSeancesCloturer() {
+  if (!_ohSeanceEnCours) return;
+  _ohSeanceEnCours.cloturee = true;
+  var d = ohSeancesGetData();
+  for (var i = 0; i < d.seances.length; i++) {
+    if (d.seances[i].id === _ohSeanceEnCours.id) { d.seances[i] = _ohSeanceEnCours; break; }
+  }
+  ohSeancesSaveData(d);
+  _ohSeanceEnCours = null;
+}
+
+function ohSeancesSupprimerSerie(serieId) {
+  if (!_ohSeanceEnCours) return;
+  _ohSeanceEnCours.series = _ohSeanceEnCours.series.filter(function(s){ return s.id !== serieId; });
+  var d = ohSeancesGetData();
+  for (var i = 0; i < d.seances.length; i++) {
+    if (d.seances[i].id === _ohSeanceEnCours.id) { d.seances[i] = _ohSeanceEnCours; break; }
+  }
+  ohSeancesSaveData(d);
+}
+
+function ohSeancesAjouterExoPerso(nom, zoneId, description) {
+  nom = String(nom || '').trim();
+  if (!nom) return null;
+  var exo = {
+    id: 'perso_' + Date.now() + '_' + Math.floor(Math.random()*9999),
+    nom: nom, zone: zoneId || 'mes_exos',
+    description: String(description || '').trim(), perso: true
+  };
+  var d = ohSeancesGetData();
+  d.exos_perso.push(exo);
+  ohSeancesSaveData(d);
+  return exo;
+}
+
+function ohSeancesGetExosPersoParZone(zoneId) {
+  var d = ohSeancesGetData();
+  if (!d.exos_perso) return [];
+  return d.exos_perso.filter(function(e) {
+    if (zoneId === 'mes_exos') return e.zone === 'mes_exos';
+    return e.zone === zoneId || e.zone === 'mes_exos';
+  });
+}
+
+function ohEsc(str) {
+  if (str === null || str === undefined) return '';
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function ohEscAttr(str) {
+  if (!str) return '';
+  return String(str).replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+}
+
+function ohSeancesRender() {
+  var c = document.getElementById('seances-content');
+  if (!c) return;
+  if (_ohSeancesVue === 'zones')      return ohSeancesAfficherZones();
+  if (_ohSeancesVue === 'exos')       return ohSeancesAfficherExos(_ohSeancesZoneActive);
+  if (_ohSeancesVue === 'saisie')     return ohSeancesAfficherSaisie(_ohSeancesExoActif.id, _ohSeancesExoActif.nom, _ohSeancesZoneActive);
+  if (_ohSeancesVue === 'historique') return ohSeancesAfficherHistorique();
+  if (_ohSeancesVue === 'exo_perso')  return ohSeancesAfficherFormExoPerso(_ohSeancesZoneActive);
+
+  ohSeancesOuvrirOuCreer();
+  var s = _ohSeanceEnCours;
+  var nbSeries = s ? s.series.length : 0;
+
+  var h = '<div style="padding:1rem">';
+  h += '<h2 style="font-size:1.2rem;font-weight:800;margin:0 0 0.4rem">📋 Séances</h2>';
+  h += '<p style="color:var(--muted);font-size:0.85rem;margin:0 0 1.2rem">Catalogue complet · Cardio · Exos personnalisés</p>';
+
+  h += '<div style="background:var(--card);border-radius:12px;padding:1rem;margin-bottom:1rem">';
+  h += '<div style="font-weight:700;font-size:0.95rem;margin-bottom:0.3rem">Séance du jour</div>';
+  if (nbSeries === 0) {
+    h += '<div style="color:var(--muted);font-size:0.85rem">Aucune série enregistrée</div>';
+  } else {
+    var byZone = {};
+    for (var i = 0; i < s.series.length; i++) {
+      var z = s.series[i].zone;
+      byZone[z] = (byZone[z] || 0) + 1;
+    }
+    var parts = [];
+    Object.keys(byZone).forEach(function(z) {
+      var lab = OH_SEANCES_CATALOGUE[z] ? OH_SEANCES_CATALOGUE[z].label : z;
+      parts.push(byZone[z] + ' série' + (byZone[z] > 1 ? 's' : '') + ' ' + lab);
+    });
+    h += '<div style="font-size:0.9rem;color:var(--text)">' + parts.join(' · ') + '</div>';
+  }
+  h += '</div>';
+
+  h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:0.6rem;margin-bottom:1rem">';
+  h += '<button class="sp-btn" onclick="_ohSeancesVue=\'zones\';ohSeancesRender()" type="button" style="font-size:0.9rem;padding:0.75rem">➕ Ajouter une série</button>';
+  h += '<button class="sp-btn sp-btn-sec" onclick="_ohSeancesVue=\'historique\';ohSeancesRender()" type="button" style="font-size:0.9rem;padding:0.75rem">📅 Historique</button>';
+  h += '</div>';
+
+  if (nbSeries > 0) {
+    h += '<div style="background:var(--card);border-radius:12px;padding:0.75rem;margin-bottom:0.8rem">';
+    h += '<div style="font-weight:700;font-size:0.85rem;margin-bottom:0.5rem">En cours</div>';
+    for (var j = 0; j < s.series.length; j++) {
+      var sr = s.series[j];
+      var details = '';
+      if (sr.typeCardio) {
+        if (sr.dureeMin) details += sr.dureeMin + ' min';
+        if (sr.distKm)   details += ' · ' + sr.distKm + ' km';
+      } else {
+        if (sr.charge)   details += sr.charge + ' kg';
+        if (sr.reps)     details += (details ? ' × ' : '') + sr.reps + ' reps';
+      }
+      if (sr.effort)     details += ' · RPE ' + sr.effort;
+      h += '<div style="display:flex;justify-content:space-between;align-items:center;padding:0.3rem 0;border-bottom:1px solid var(--border)">';
+      h += '<div><span style="font-weight:600;font-size:0.85rem">' + ohEsc(sr.exoNom) + '</span>';
+      if (details) h += '<span style="font-size:0.78rem;color:var(--muted);margin-left:0.4rem">' + ohEsc(details) + '</span>';
+      h += '</div>';
+      h += '<button onclick="ohSeancesSupprimerSerie(\'' + ohEscAttr(sr.id) + '\');ohSeancesRender()" type="button" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:1rem;padding:0.2rem 0.4rem" aria-label="Supprimer">✕</button>';
+      h += '</div>';
+    }
+    h += '</div>';
+    h += '<button onclick="ohSeancesConfirmerCloturer()" type="button" style="width:100%;background:none;border:1px solid var(--muted);color:var(--muted);border-radius:8px;padding:0.5rem;font-size:0.82rem;cursor:pointer">Clôturer la séance</button>';
+  }
+  h += '</div>';
+  c.innerHTML = h;
+}
+
+function ohSeancesAfficherZones() {
+  var c = document.getElementById('seances-content');
+  if (!c) return;
+  var h = '<div style="padding:1rem">';
+  h += '<div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:1rem">';
+  h += '<button onclick="_ohSeancesVue=\'accueil\';ohSeancesRender()" type="button" style="background:none;border:none;cursor:pointer;font-size:1.3rem;padding:0" aria-label="Retour">‹</button>';
+  h += '<h2 style="font-size:1.1rem;font-weight:800;margin:0">Choisir une zone</h2>';
+  h += '</div>';
+  h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:0.6rem">';
+  var zones = Object.keys(OH_SEANCES_CATALOGUE);
+  for (var i = 0; i < zones.length; i++) {
+    var z = OH_SEANCES_CATALOGUE[zones[i]];
+    h += '<button onclick="_ohSeancesZoneActive=\'' + zones[i] + '\';_ohSeancesVue=\'exos\';ohSeancesRender()" type="button" ';
+    h += 'style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:1rem 0.5rem;cursor:pointer;text-align:center">';
+    h += '<div style="font-size:1.6rem;margin-bottom:0.3rem">' + z.icon + '</div>';
+    h += '<div style="font-size:0.85rem;font-weight:700;color:var(--text)">' + ohEsc(z.label) + '</div>';
+    h += '</button>';
+  }
+  h += '<button onclick="_ohSeancesZoneActive=\'mes_exos\';_ohSeancesVue=\'exos\';ohSeancesRender()" type="button" ';
+  h += 'style="background:var(--card);border:1px dashed var(--accent);border-radius:12px;padding:1rem 0.5rem;cursor:pointer;text-align:center">';
+  h += '<div style="font-size:1.6rem;margin-bottom:0.3rem">⭐</div>';
+  h += '<div style="font-size:0.85rem;font-weight:700;color:var(--accent)">Mes exos</div>';
+  h += '</button>';
+  h += '</div></div>';
+  c.innerHTML = h;
+}
+
+function ohSeancesAfficherExos(zoneId) {
+  var c = document.getElementById('seances-content');
+  if (!c) return;
+  var isMesExos = (zoneId === 'mes_exos');
+  var zone = isMesExos ? null : OH_SEANCES_CATALOGUE[zoneId];
+  var label = isMesExos ? 'Mes exercices' : (zone ? zone.label : zoneId);
+  var exosCatalogue = isMesExos ? [] : (zone ? zone.exos : []);
+  var exosPerso = ohSeancesGetExosPersoParZone(zoneId);
+
+  var h = '<div style="padding:1rem">';
+  h += '<div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:1rem">';
+  h += '<button onclick="_ohSeancesVue=\'zones\';ohSeancesRender()" type="button" style="background:none;border:none;cursor:pointer;font-size:1.3rem;padding:0" aria-label="Retour">‹</button>';
+  h += '<h2 style="font-size:1.1rem;font-weight:800;margin:0">' + ohEsc(label) + '</h2>';
+  h += '</div>';
+
+  if (exosCatalogue.length > 0) {
+    h += '<div style="margin-bottom:0.5rem">';
+    for (var i = 0; i < exosCatalogue.length; i++) {
+      var e = exosCatalogue[i];
+      h += '<button onclick="_ohSeancesExoActif={id:\'' + ohEscAttr(e.id) + '\',nom:\'' + ohEscAttr(e.nom) + '\'};_ohSeancesVue=\'saisie\';ohSeancesRender()" type="button" ';
+      h += 'style="display:block;width:100%;text-align:left;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:0.65rem 0.8rem;margin-bottom:0.4rem;cursor:pointer">';
+      h += '<span style="font-size:0.9rem;font-weight:600;color:var(--text)">' + ohEsc(e.nom) + '</span>';
+      h += '</button>';
+    }
+    h += '</div>';
+  }
+
+  if (exosPerso.length > 0) {
+    if (!isMesExos && exosCatalogue.length > 0) {
+      h += '<div style="font-size:0.78rem;color:var(--muted);font-weight:700;text-transform:uppercase;margin:0.8rem 0 0.4rem">Mes exercices</div>';
+    }
+    for (var j = 0; j < exosPerso.length; j++) {
+      var ep = exosPerso[j];
+      h += '<button onclick="_ohSeancesExoActif={id:\'' + ohEscAttr(ep.id) + '\',nom:\'' + ohEscAttr(ep.nom) + '\'};_ohSeancesVue=\'saisie\';ohSeancesRender()" type="button" ';
+      h += 'style="display:block;width:100%;text-align:left;background:var(--card);border:1px solid var(--accent);border-radius:8px;padding:0.65rem 0.8rem;margin-bottom:0.4rem;cursor:pointer">';
+      h += '<span style="font-size:0.9rem;font-weight:600;color:var(--accent)">⭐ ' + ohEsc(ep.nom) + '</span>';
+      if (ep.description) h += '<span style="font-size:0.78rem;color:var(--muted);margin-left:0.4rem">' + ohEsc(ep.description) + '</span>';
+      h += '</button>';
+    }
+  }
+
+  if (!isMesExos && exosCatalogue.length === 0 && exosPerso.length === 0) {
+    h += '<p style="color:var(--muted);font-size:0.85rem">Aucun exercice dans cette zone.</p>';
+  }
+  if (isMesExos && exosPerso.length === 0) {
+    h += '<p style="color:var(--muted);font-size:0.85rem">Vous n\'avez pas encore ajouté d\'exercice personnalisé.</p>';
+  }
+
+  h += '<button onclick="_ohSeancesVue=\'exo_perso\';ohSeancesRender()" type="button" ';
+  h += 'style="display:block;width:100%;background:none;border:1px dashed var(--accent);color:var(--accent);border-radius:8px;padding:0.65rem;margin-top:0.8rem;cursor:pointer;font-size:0.88rem;font-weight:600">+ Ajouter un exercice personnalisé</button>';
+  h += '</div>';
+  c.innerHTML = h;
+}
+
+function ohSeancesAfficherFormExoPerso(zoneId) {
+  var c = document.getElementById('seances-content');
+  if (!c) return;
+  var h = '<div style="padding:1rem">';
+  h += '<div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:1rem">';
+  h += '<button onclick="_ohSeancesVue=\'exos\';ohSeancesRender()" type="button" style="background:none;border:none;cursor:pointer;font-size:1.3rem;padding:0">‹</button>';
+  h += '<h2 style="font-size:1.1rem;font-weight:800;margin:0">Nouvel exercice</h2>';
+  h += '</div>';
+  h += '<div style="margin-bottom:1rem"><label style="font-size:0.85rem;font-weight:600;display:block;margin-bottom:0.3rem">Nom de l\'exercice *</label>';
+  h += '<input id="seances-exo-nom" type="text" placeholder="Ex : Tirage nuque fauteuil" style="width:100%;box-sizing:border-box;padding:0.65rem;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--text);font-size:0.9rem"></div>';
+  h += '<div style="margin-bottom:1rem"><label style="font-size:0.85rem;font-weight:600;display:block;margin-bottom:0.3rem">Zone musculaire</label>';
+  h += '<select id="seances-exo-zone" style="width:100%;padding:0.65rem;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--text);font-size:0.9rem">';
+  var zones = Object.keys(OH_SEANCES_CATALOGUE);
+  for (var i = 0; i < zones.length; i++) {
+    var selected = (zones[i] === zoneId) ? ' selected' : '';
+    h += '<option value="' + zones[i] + '"' + selected + '>' + ohEsc(OH_SEANCES_CATALOGUE[zones[i]].label) + '</option>';
+  }
+  h += '<option value="mes_exos"' + (zoneId === 'mes_exos' ? ' selected' : '') + '>⭐ Section Mes exercices uniquement</option>';
+  h += '</select></div>';
+  h += '<div style="margin-bottom:1.2rem"><label style="font-size:0.85rem;font-weight:600;display:block;margin-bottom:0.3rem">Description / équipement (optionnel)</label>';
+  h += '<input id="seances-exo-desc" type="text" placeholder="Ex : Machine adaptée PMR, position haute" style="width:100%;box-sizing:border-box;padding:0.65rem;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--text);font-size:0.9rem"></div>';
+  h += '<button onclick="ohSeancesSauvegarderExoPerso(true)" type="button" class="sp-btn" style="width:100%">Enregistrer</button>';
+  h += '</div>';
+  c.innerHTML = h;
+}
+
+function ohSeancesSauvegarderExoPerso(retourZone) {
+  var nom  = (document.getElementById('seances-exo-nom')  || {value:''}).value;
+  var zone = (document.getElementById('seances-exo-zone') || {value:'mes_exos'}).value;
+  var desc = (document.getElementById('seances-exo-desc') || {value:''}).value;
+  if (!nom.trim()) { if (typeof ohToast === 'function') ohToast('Le nom est obligatoire'); return; }
+  ohSeancesAjouterExoPerso(nom, zone, desc);
+  _ohSeancesZoneActive = zone;
+  _ohSeancesVue = retourZone ? 'exos' : 'accueil';
+  ohSeancesRender();
+}
+
+function ohSeancesAfficherSaisie(exoId, exoNom, zoneId) {
+  var c = document.getElementById('seances-content');
+  if (!c) return;
+  var isCardio = (zoneId === 'cardio');
+  var lastCharge = '', lastReps = '';
+  if (!isCardio && _ohSeanceEnCours) {
+    var series = _ohSeanceEnCours.series;
+    for (var i = series.length - 1; i >= 0; i--) {
+      if (series[i].exoId === exoId && !series[i].typeCardio) {
+        lastCharge = series[i].charge !== null ? String(series[i].charge) : '';
+        lastReps   = series[i].reps   !== null ? String(series[i].reps)   : '';
+        break;
+      }
+    }
+  }
+  _ohSeancesRPE = null;
+
+  var zoneLabel = zoneId === 'mes_exos' ? 'Mes exercices' : (OH_SEANCES_CATALOGUE[zoneId] ? OH_SEANCES_CATALOGUE[zoneId].label : zoneId);
+  var h = '<div style="padding:1rem">';
+  h += '<div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.3rem">';
+  h += '<button onclick="_ohSeancesVue=\'exos\';ohSeancesRender()" type="button" style="background:none;border:none;cursor:pointer;font-size:1.3rem;padding:0">‹</button>';
+  h += '<h2 style="font-size:1.1rem;font-weight:800;margin:0">' + ohEsc(exoNom) + '</h2>';
+  h += '</div>';
+  h += '<p style="color:var(--muted);font-size:0.8rem;margin:0 0 1rem">' + ohEsc(zoneLabel) + '</p>';
+
+  if (!isCardio) {
+    h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:0.6rem;margin-bottom:1rem">';
+    h += '<div><label style="font-size:0.82rem;font-weight:600;display:block;margin-bottom:0.25rem">Charge (kg)</label>';
+    h += '<input id="saisie-charge" type="number" min="0" step="0.5" value="' + ohEsc(lastCharge) + '" placeholder="—" style="width:100%;box-sizing:border-box;padding:0.65rem;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--text);font-size:1rem;text-align:center"></div>';
+    h += '<div><label style="font-size:0.82rem;font-weight:600;display:block;margin-bottom:0.25rem">Répétitions</label>';
+    h += '<input id="saisie-reps" type="number" min="1" step="1" value="' + ohEsc(lastReps) + '" placeholder="—" style="width:100%;box-sizing:border-box;padding:0.65rem;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--text);font-size:1rem;text-align:center"></div>';
+    h += '</div>';
+  } else {
+    h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:0.6rem;margin-bottom:1rem">';
+    h += '<div><label style="font-size:0.82rem;font-weight:600;display:block;margin-bottom:0.25rem">Durée (min)</label>';
+    h += '<input id="saisie-duree" type="number" min="1" step="1" placeholder="—" style="width:100%;box-sizing:border-box;padding:0.65rem;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--text);font-size:1rem;text-align:center"></div>';
+    h += '<div><label style="font-size:0.82rem;font-weight:600;display:block;margin-bottom:0.25rem">Distance (km)</label>';
+    h += '<input id="saisie-dist" type="number" min="0" step="0.1" placeholder="—" style="width:100%;box-sizing:border-box;padding:0.65rem;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--text);font-size:1rem;text-align:center"></div>';
+    h += '</div>';
+  }
+
+  h += '<div style="margin-bottom:1.2rem"><label style="font-size:0.82rem;font-weight:600;display:block;margin-bottom:0.5rem">Effort perçu (RPE) — optionnel</label>';
+  h += '<div id="saisie-rpe-row" style="display:flex;gap:0.3rem;flex-wrap:wrap">';
+  for (var n = 1; n <= 10; n++) {
+    h += '<button id="rpe-btn-' + n + '" onclick="ohSeancesSetRPE(' + n + ')" type="button" ';
+    h += 'style="flex:0 0 auto;width:2.4rem;height:2.4rem;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--text);cursor:pointer;font-size:0.85rem;font-weight:700">' + n + '</button>';
+  }
+  h += '</div></div>';
+  h += '<button onclick="ohSeancesValiderSerie()" type="button" class="sp-btn" style="width:100%;font-size:1rem;padding:0.8rem">Valider la série</button>';
+  h += '</div>';
+  c.innerHTML = h;
+}
+
+function ohSeancesSetRPE(val) {
+  _ohSeancesRPE = val;
+  for (var n = 1; n <= 10; n++) {
+    var btn = document.getElementById('rpe-btn-' + n);
+    if (!btn) continue;
+    if (n === val) { btn.style.background='var(--accent)';btn.style.color='#fff';btn.style.borderColor='var(--accent)'; }
+    else { btn.style.background='var(--card)';btn.style.color='var(--text)';btn.style.borderColor='var(--border)'; }
+  }
+}
+
+function ohSeancesValiderSerie() {
+  var isCardio = (_ohSeancesZoneActive === 'cardio');
+  if (!_ohSeancesExoActif) return;
+  if (isCardio) {
+    var duree = (document.getElementById('saisie-duree') || {value:''}).value;
+    var dist  = (document.getElementById('saisie-dist')  || {value:''}).value;
+    ohSeancesAjouterSerie(_ohSeancesExoActif.id, _ohSeancesExoActif.nom, _ohSeancesZoneActive, null, null, _ohSeancesRPE, true, duree, dist);
+  } else {
+    var charge = (document.getElementById('saisie-charge') || {value:''}).value;
+    var reps   = (document.getElementById('saisie-reps')   || {value:''}).value;
+    if (!reps) { if (typeof ohToast === 'function') ohToast('Renseignez au moins les répétitions'); return; }
+    ohSeancesAjouterSerie(_ohSeancesExoActif.id, _ohSeancesExoActif.nom, _ohSeancesZoneActive, charge, reps, _ohSeancesRPE, false);
+  }
+  _ohSeancesVue = 'exos';
+  ohSeancesRender();
+  if (typeof ohToast === 'function') ohToast('Série enregistrée ✓');
+}
+
+function ohSeancesConfirmerCloturer() {
+  if (confirm('Clôturer la séance du jour ? Elle ne sera plus modifiable.')) {
+    ohSeancesCloturer();
+    _ohSeancesVue = 'accueil';
+    ohSeancesRender();
+    if (typeof ohToast === 'function') ohToast('Séance clôturée 🎉');
+  }
+}
+
+function ohSeancesAfficherHistorique() {
+  var c = document.getElementById('seances-content');
+  if (!c) return;
+  var d = ohSeancesGetData();
+  var seances = d.seances.slice().reverse();
+  if (seances.length > 20) seances = seances.slice(0, 20);
+
+  var h = '<div style="padding:1rem">';
+  h += '<div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:1rem">';
+  h += '<button onclick="_ohSeancesVue=\'accueil\';ohSeancesRender()" type="button" style="background:none;border:none;cursor:pointer;font-size:1.3rem;padding:0">‹</button>';
+  h += '<h2 style="font-size:1.1rem;font-weight:800;margin:0">Historique</h2>';
+  h += '</div>';
+  if (seances.length === 0) h += '<p style="color:var(--muted);font-size:0.85rem">Aucune séance enregistrée.</p>';
+  for (var i = 0; i < seances.length; i++) {
+    var s = seances[i];
+    var nb = s.series ? s.series.length : 0;
+    var status = s.cloturee ? '✓' : '⏳';
+    h += '<div style="background:var(--card);border-radius:10px;padding:0.75rem;margin-bottom:0.5rem">';
+    h += '<div style="display:flex;justify-content:space-between;align-items:center">';
+    h += '<div><span style="font-weight:700;font-size:0.9rem">' + ohEsc(s.date || '—') + '</span>';
+    h += '<span style="font-size:0.78rem;color:var(--muted);margin-left:0.5rem">' + status + (s.cloturee ? ' Clôturée' : ' En cours') + '</span></div>';
+    h += '<span style="font-size:0.82rem;color:var(--muted)">' + nb + ' série' + (nb !== 1 ? 's' : '') + '</span>';
+    h += '</div>';
+    if (nb > 0) {
+      var byZone = {};
+      for (var j = 0; j < s.series.length; j++) { var z = s.series[j].zone; byZone[z] = (byZone[z] || 0) + 1; }
+      var parts = [];
+      Object.keys(byZone).forEach(function(z) {
+        var lab = OH_SEANCES_CATALOGUE[z] ? OH_SEANCES_CATALOGUE[z].label : z;
+        parts.push(byZone[z] + ' ' + lab);
+      });
+      h += '<div style="font-size:0.78rem;color:var(--muted);margin-top:0.3rem">' + parts.join(' · ') + '</div>';
+    }
+    h += '</div>';
+  }
+  h += '</div>';
+  c.innerHTML = h;
 }
 
 </script>
