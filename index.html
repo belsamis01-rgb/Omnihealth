@@ -5031,10 +5031,17 @@ function pdcPanelSuivi() {
 
 // ─── Panel Historique ───
 function pdcPanelHist() {
+  try { OH_profile = JSON.parse(localStorage.getItem('oh_profile')) || OH_profile; } catch(e) {}
+  var _p = (typeof OH_profile !== 'undefined' && OH_profile) ? OH_profile : {};
+  var _profBarre = (_p.barreMax && _p.barreMax > 0) ? _p.barreMax : 0;
+  var _hasProf = _profBarre > 0;
+  var _badgeMax = _hasProf
+    ? '<span style="font-size:0.72rem;color:#00c896;font-weight:600;margin-left:6px">🔗 issu du profil</span>'
+    : '';
   var d=new Date();
   var dateVal=d.getFullYear()+'-'+pdcPad(d.getMonth()+1)+'-'+pdcPad(d.getDate());
   var h='<div class="pdc-card"><div class="pdc-card-title">Enregistrer une séance</div>';
-  h+='<div class="pdc-row"><div class="pdc-field"><label class="pdc-label">Max de référence (kg)</label><input class="pdc-input" type="number" id="pdc-log-ref" inputmode="decimal" step="0.5" value="140"></div>';
+  h+='<div class="pdc-row"><div class="pdc-field"><label class="pdc-label">Max de référence (kg)'+_badgeMax+'</label><input class="pdc-input" type="number" id="pdc-log-ref" inputmode="decimal" step="0.5'+(_hasProf?' style="background:#f0fdf8;border-color:#00c896"':'')+ ' value="'+(_hasProf?_profBarre:'')+'">' + '</div>';
   h+='<div class="pdc-field"><label class="pdc-label">Date</label><input class="pdc-input" type="date" id="pdc-log-date" value="'+dateVal+'" style="font-size:0.9rem"></div></div>';
   h+='<div class="pdc-field" style="margin-top:8px"><label class="pdc-label">Séries</label><div id="pdc-log-sets"></div>';
   h+='<button class="pdc-add-set" id="pdc-add-set" type="button">+ Ajouter une série</button></div>';
