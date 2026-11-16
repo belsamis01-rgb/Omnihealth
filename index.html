@@ -4599,7 +4599,7 @@ function ohMoiModal(titre, corps, onConfirm, confirmLabel, fullScreen) {
 
   var confirmBtn = document.getElementById('oh-modal-confirm-btn');
   if (confirmBtn) confirmBtn.addEventListener('click', function() {
-    if (_ohModalCb) { var cb = _ohModalCb; _ohModalCb = null; modal.remove(); cb(); }
+    if (_ohModalCb) { var cb = _ohModalCb; _ohModalCb = null; try { cb(); } finally { modal.remove(); } }
     else { modal.remove(); }
   });
 
