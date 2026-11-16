@@ -4252,6 +4252,11 @@ function ohEditProfile() {
     +     _radioBtn('ep-mobilite', 'actif', '&#128170; Tr&#232;s actif', p.mobilite === 'actif')
     +   '</div>'
     + '</div>'
+    + '<div style="margin-top:1rem;border-top:1px solid #eee;padding-top:0.9rem">'
+    +   '<div style="font-size:0.78rem;font-weight:700;color:#666;margin-bottom:0.5rem">&#127947; Para D&#233;velopp&#233; Couch&#233; (optionnel)</div>'
+    +   '<div style="font-size:0.75rem;color:#999;margin-bottom:0.5rem">Si renseign&#233;, utilis&#233; automatiquement dans Para DC.</div>'
+    +   _formRow('Barre max (kg)', 'number', 'ep-barre-max', p.barreMax || '', 'ex : 130', '0.5', '400')
+    + '</div>'
     + '</div>';
 
   ohMoiModal('&#9999;&#65039; Modifier mon profil', html, function() {
@@ -4277,6 +4282,8 @@ function ohEditProfile() {
     updated.sexe     = sexe;
     updated.mobilite = mob;
     updated.imc      = imc;
+    var barreMaxVal = parseFloat((document.getElementById('ep-barre-max') || {}).value);
+    updated.barreMax = barreMaxVal > 0 ? barreMaxVal : (p.barreMax || null);
     updated.nutGoal  = ohRecalcNutGoal(updated);
 
     localStorage.setItem('oh_profile', JSON.stringify(updated));
@@ -4897,9 +4904,21 @@ function pdcPanelEst() {
 
 // ─── Panel Charges ───
 function pdcPanelWork() {
+  var _p = (typeof OH_profile !== 'undefined' && OH_profile) ? OH_profile : {};
+  var _profBarre = (_p.barreMax && _p.barreMax > 0) ? _p.barreMax : 140;
+  var _profPoids = (_p.poids && _p.poids > 0) ? _p.poids : 78.4;
+  var _profSexe  = _p.sexe === 'F' ? 'F' : 'M';
+  var _hasProf   = !!_p.barreMax;
+  var _badgeMax  = _hasProf
+    ? '<span style="font-size:0.72rem;color:#00c896;font-weight:600;margin-left:6px">🔗 issu du profil</span>'
+    : '';
+  var _badgePoids = (_p.poids > 0)
+    ? '<span style="font-size:0.72rem;color:#00c896;font-weight:600;margin-left:6px">🔗 issu du profil</span>'
+    : '';
+
   var h = '<div class="pdc-card">';
-  h += '<div class="pdc-card-title">Max de référence</div>';
-  h += '<input class="pdc-input" type="number" id="pdc-target" inputmode="decimal" min="20" max="400" step="0.5" value="140">';
+  h += '<div class="pdc-card-title">Max de référence' + _badgeMax + '</div>';
+  h += '<input class="pdc-input" type="number" id="pdc-target" inputmode="decimal" min="20" max="400" step="0.5" value="' + _profBarre + '"' + (_hasProf ? ' style="background:#f0fdf8;border-color:#00c896"' : '') + '>';
   h += '<p class="pdc-err" id="pdc-err2" style="display:none"></p>';
   h += '</div>';
   h += '<div class="pdc-card"><div class="pdc-card-title">Essais de compétition</div>';
@@ -4907,8 +4926,8 @@ function pdcPanelWork() {
   h += '<div class="pdc-attempts" id="pdc-attempts"></div></div>';
   h += '<div class="pdc-card"><div class="pdc-card-title">Catégorie WPPO 2025</div>';
   h += '<div class="pdc-row">';
-  h += '<div class="pdc-field"><label class="pdc-label">Sexe</label><select class="pdc-select" id="pdc-sex"><option value="F">Femme</option><option value="M" selected>Homme</option></select></div>';
-  h += '<div class="pdc-field"><label class="pdc-label">Poids de corps (kg)</label><input class="pdc-input" type="number" id="pdc-bw" inputmode="decimal" min="25" max="250" step="0.1" value="78.4"></div>';
+  h += '<div class="pdc-field"><label class="pdc-label">Sexe</label><select class="pdc-select" id="pdc-sex"><option value="F"' + (_profSexe==='F'?' selected':'') + '>Femme</option><option value="M"' + (_profSexe==='M'?' selected':'') + '>Homme</option></select></div>';
+  h += '<div class="pdc-field"><label class="pdc-label">Poids de corps (kg)' + _badgePoids + '</label><input class="pdc-input" type="number" id="pdc-bw" inputmode="decimal" min="25" max="250" step="0.1" value="' + _profPoids + '"' + ((_p.poids > 0) ? ' style="background:#f0fdf8;border-color:#00c896"' : '') + '></div>';
   h += '</div><p class="pdc-cat-txt" id="pdc-cat"></p><p class="pdc-cat-sub" id="pdc-cat-sub"></p></div>';
   h += '<div class="pdc-card"><div class="pdc-card-title">Pyramide d\'entraînement</div>';
   h += '<div class="pdc-pyr-types">';
@@ -4926,10 +4945,17 @@ function pdcPanelDots() {
   h += '<button class="pdc-seg-btn'+(  _pdcState.pdMode==='lift' ?' active':'')+'" data-pm="lift"  type="button">Pts → barre</button>';
   h += '<button class="pdc-seg-btn'+(  _pdcState.pdMode==='team' ?' active':'')+'" data-pm="team"  type="button">Équipe</button>';
   h += '</div></div>';
+  var _pp = (typeof OH_profile !== 'undefined' && OH_profile) ? OH_profile : {};
+  var _ppPoids = (_pp.poids && _pp.poids > 0) ? _pp.poids : 78.4;
+  var _ppSexe  = _pp.sexe === 'F' ? 'F' : 'M';
+  var _ppBadge = (_pp.poids > 0)
+    ? '<span style="font-size:0.72rem;color:#00c896;font-weight:600;margin-left:6px">🔗 profil</span>'
+    : '';
+
   h += '<div id="pdc-pd-single" class="pdc-card" style="'+(  _pdcState.pdMode==='team'?'display:none':'')+'">';
   h += '<div class="pdc-row">';
-  h += '<div class="pdc-field"><label class="pdc-label">Sexe</label><select class="pdc-select" id="pdc-pd-sex"><option value="F">Femme</option><option value="M" selected>Homme</option></select></div>';
-  h += '<div class="pdc-field"><label class="pdc-label">Poids de corps (kg)</label><input class="pdc-input" type="number" id="pdc-pd-bw" inputmode="decimal" step="0.1" value="78.4"></div>';
+  h += '<div class="pdc-field"><label class="pdc-label">Sexe</label><select class="pdc-select" id="pdc-pd-sex"><option value="F"' + (_ppSexe==='F'?' selected':'') + '>Femme</option><option value="M"' + (_ppSexe==='M'?' selected':'') + '>Homme</option></select></div>';
+  h += '<div class="pdc-field"><label class="pdc-label">Poids (kg)' + _ppBadge + '</label><input class="pdc-input" type="number" id="pdc-pd-bw" inputmode="decimal" step="0.1" value="' + _ppPoids + '"' + ((_pp.poids > 0) ? ' style="background:#f0fdf8;border-color:#00c896"' : '') + '></div>';
   h += '<div class="pdc-field"><label class="pdc-label" id="pdc-pd-val-lbl">'+(  _pdcState.pdMode==='score'?'Barre (kg)':'Score visé (pts)')+'</label>';
   h += '<input class="pdc-input" type="number" id="pdc-pd-val" inputmode="decimal" step="1" value="'+_pdcState.pdStore[_pdcState.pdMode==='team'?'score':_pdcState.pdMode]+'"></div>';
   h += '</div>';
