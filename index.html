@@ -4885,11 +4885,11 @@ function pdcBuildHTML() {
 }
 
 // ─── Panel 1RM ───
-function pdcPanelEst() {
+function pdcPanelEst() { var _ep={}; try{_ep=JSON.parse(localStorage.getItem("oh_profile"))||{};}catch(e){} var _estHas=_ep.barreMax>0; var _estLoad=_estHas?_ep.barreMax:120; if(_estHas){_pdcState.reps=1;}
   var h = '<div class="pdc-card">';
   h += '<div class="pdc-card-title">Charge & répétitions</div>';
   h += '<div class="pdc-row">';
-  h += '<div class="pdc-field"><label class="pdc-label">Charge soulevée (kg)</label><input class="pdc-input" type="number" id="pdc-load" inputmode="decimal" min="20" max="400" step="0.5" value="120"></div>';
+  h += '<div class="pdc-field"><label class="pdc-label">Charge soulevée (kg)</label><input class="pdc-input" type="number" id="pdc-load" inputmode="decimal" min="20" max="400" step="0.5" value="'+_estLoad+'"'+(_estHas?' style="background:#f0fdf8;border-color:#00c896"':'')+'></div>';
   h += '<div class="pdc-field"><label class="pdc-label">Arrondi</label><select class="pdc-select" id="pdc-round"><option value="0.5">0,5 kg</option><option value="1" selected>1 kg (WPPO)</option><option value="2.5">2,5 kg</option></select></div>';
   h += '</div>';
   h += '<div class="pdc-field"><label class="pdc-label">Répétitions réalisées</label><div class="pdc-reps" id="pdc-reps">';
