@@ -5222,7 +5222,7 @@ function pdcRenderEst() {
   pdcRenderEquiv(max,ri,s);
   // Sync target dans charges si on y va
   var target=document.getElementById('pdc-target');
-  if(target&&isFinite(max)) target.value=max;
+  if(target && isFinite(max) && !(typeof OH_profile!=="undefined" && OH_profile && OH_profile.barreMax>0)) target.value=max;
 }
 
 // ─── Draw bar ───
