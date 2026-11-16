@@ -4290,6 +4290,8 @@ function ohEditProfile() {
     // Recharger la variable globale
     try { OH_profile = JSON.parse(localStorage.getItem('oh_profile')); } catch(e) {}
     ohMoiRender();
+    // Re-rendre Para DC si ouvert, pour propager barreMax/poids/sexe
+    if (document.getElementById('pdc-content')) { try { ohParaDCRender(); } catch(e) {} }
     ohToast('Profil mis à jour ✓');
   }, 'Enregistrer');
 }
@@ -4904,6 +4906,7 @@ function pdcPanelEst() {
 
 // ─── Panel Charges ───
 function pdcPanelWork() {
+  try { OH_profile = JSON.parse(localStorage.getItem('oh_profile')) || OH_profile; } catch(e) {}
   var _p = (typeof OH_profile !== 'undefined' && OH_profile) ? OH_profile : {};
   var _profBarre = (_p.barreMax && _p.barreMax > 0) ? _p.barreMax : 140;
   var _profPoids = (_p.poids && _p.poids > 0) ? _p.poids : 78.4;
@@ -4945,6 +4948,7 @@ function pdcPanelDots() {
   h += '<button class="pdc-seg-btn'+(  _pdcState.pdMode==='lift' ?' active':'')+'" data-pm="lift"  type="button">Pts → barre</button>';
   h += '<button class="pdc-seg-btn'+(  _pdcState.pdMode==='team' ?' active':'')+'" data-pm="team"  type="button">Équipe</button>';
   h += '</div></div>';
+  try { OH_profile = JSON.parse(localStorage.getItem('oh_profile')) || OH_profile; } catch(e) {}
   var _pp = (typeof OH_profile !== 'undefined' && OH_profile) ? OH_profile : {};
   var _ppPoids = (_pp.poids && _pp.poids > 0) ? _pp.poids : 78.4;
   var _ppSexe  = _pp.sexe === 'F' ? 'F' : 'M';
