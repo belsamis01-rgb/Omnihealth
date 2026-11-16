@@ -6562,121 +6562,257 @@ function ohFoodOnlineBlock() {
 
 var OH_SEANCES_CATALOGUE = {
   pectoraux: {
-    label: 'Pectoraux', icon: '💪',
-    exos: [
-      { id: 'pec_dc_barre',    nom: 'Développé couché barre',    variante: '' },
-      { id: 'pec_dc_halt',     nom: 'Développé couché haltères', variante: '' },
-      { id: 'pec_incline',     nom: 'Développé incliné',         variante: '' },
-      { id: 'pec_decline',     nom: 'Développé décliné',         variante: '' },
-      { id: 'pec_ecartes',     nom: 'Écarté haltères',           variante: '' },
-      { id: 'pec_ecartes_inc', nom: 'Écarté incliné',            variante: '' },
-      { id: 'pec_butterfly',   nom: 'Butterfly (Peck deck)',      variante: '' },
-      { id: 'pec_croise',      nom: 'Croisé poulie',              variante: '' },
-      { id: 'pec_dips',        nom: 'Dips pectoraux',             variante: '' },
-      { id: 'pec_pompes',      nom: 'Pompes',                     variante: '' }
-    ]
-  },
-  dos: {
-    label: 'Dos', icon: '🏋️',
-    exos: [
-      { id: 'dos_tractions',   nom: 'Tractions',                  variante: '' },
-      { id: 'dos_lat',         nom: 'Tirage vertical (Lat)',       variante: '' },
-      { id: 'dos_rowing_bar',  nom: 'Rowing barre',                variante: '' },
-      { id: 'dos_rowing_halt', nom: 'Rowing haltère',              variante: '' },
-      { id: 'dos_rowing_cab',  nom: 'Rowing câble',                variante: '' },
-      { id: 'dos_rowing_mac',  nom: 'Rowing machine',              variante: '' },
-      { id: 'dos_sdd',         nom: 'Soulevé de terre',            variante: '' },
-      { id: 'dos_tir_horiz',   nom: 'Tirage horizontal',           variante: '' },
-      { id: 'dos_pullover',    nom: 'Pull-over',                   variante: '' },
-      { id: 'dos_hyperext',    nom: 'Hyperextension lombaires',    variante: '' }
+    label: 'Pectoraux', icon: '💪', exos: [
+      { id: 'pectoraux-dev-couche-barre', nom: 'Développé couché barre', type: 'muscu' },
+      { id: 'pectoraux-dev-incline-barre', nom: 'Développé incliné barre', type: 'muscu' },
+      { id: 'pectoraux-dev-decline-barre', nom: 'Développé décliné barre', type: 'muscu' },
+      { id: 'pectoraux-dev-couche-halt', nom: 'Développé couché haltères', type: 'muscu' },
+      { id: 'pectoraux-dev-incline-halt', nom: 'Développé incliné haltères', type: 'muscu' },
+      { id: 'pectoraux-dev-decline-halt', nom: 'Développé décliné haltères', type: 'muscu' },
+      { id: 'pectoraux-dev-couche-guidee', nom: 'Développé couché barre guidée', type: 'muscu' },
+      { id: 'pectoraux-dev-incline-guidee', nom: 'Développé incliné barre guidée', type: 'muscu' },
+      { id: 'pectoraux-dev-assis-machine', nom: 'Développé assis machine', type: 'muscu' },
+      { id: 'pectoraux-dev-incline-machine', nom: 'Développé incliné machine', type: 'muscu' },
+      { id: 'pectoraux-pec-deck', nom: 'Pec deck (butterfly)', type: 'muscu' },
+      { id: 'pectoraux-ecarte-couche-halt', nom: 'Écarté couché haltères', type: 'muscu' },
+      { id: 'pectoraux-ecarte-incline-halt', nom: 'Écarté incliné haltères', type: 'muscu' },
+      { id: 'pectoraux-ecarte-poulies', nom: 'Écarté poulies vis-à-vis', type: 'muscu' },
+      { id: 'pectoraux-ecarte-poulies-basses', nom: 'Écarté poulies basses', type: 'muscu' },
+      { id: 'pectoraux-ecarte-poulies-hautes', nom: 'Écarté poulies hautes', type: 'muscu' },
+      { id: 'pectoraux-pompes', nom: 'Pompes', type: 'muscu' },
+      { id: 'pectoraux-pompes-inclinees', nom: 'Pompes inclinées (mains surélevées)', type: 'muscu' },
+      { id: 'pectoraux-dips-buste-penche', nom: 'Dips buste penché', type: 'muscu' },
+      { id: 'pectoraux-pull-over-halt', nom: 'Pull-over haltère', type: 'muscu' },
+      { id: 'pectoraux-dev-elastique', nom: 'Développé élastique', type: 'muscu' }
     ]
   },
   epaules: {
-    label: 'Épaules', icon: '🤸',
-    exos: [
-      { id: 'ep_dev_mil',  nom: 'Développé militaire',       variante: '' },
-      { id: 'ep_dev_halt', nom: 'Développé haltères assis',  variante: '' },
-      { id: 'ep_arnold',   nom: 'Arnold press',              variante: '' },
-      { id: 'ep_lat',      nom: 'Élévations latérales',      variante: '' },
-      { id: 'ep_front',    nom: 'Élévations frontales',      variante: '' },
-      { id: 'ep_oiseau',   nom: 'Oiseau',                    variante: '' },
-      { id: 'ep_facepull', nom: 'Face pull',                 variante: '' },
-      { id: 'ep_menton',   nom: 'Tirage menton',             variante: '' },
-      { id: 'ep_hausst',   nom: "Haussements d'épaules",     variante: '' }
+    label: 'Épaules', icon: '🤸', exos: [
+      { id: 'epaules-dev-militaire-barre', nom: 'Développé militaire barre', type: 'muscu' },
+      { id: 'epaules-dev-halt', nom: 'Développé épaules haltères', type: 'muscu' },
+      { id: 'epaules-dev-arnold', nom: 'Développé Arnold', type: 'muscu' },
+      { id: 'epaules-dev-machine', nom: 'Développé épaules machine', type: 'muscu' },
+      { id: 'epaules-dev-guidee', nom: 'Développé épaules barre guidée', type: 'muscu' },
+      { id: 'epaules-elev-lat-halt', nom: 'Élévations latérales haltères', type: 'muscu' },
+      { id: 'epaules-elev-lat-poulie', nom: 'Élévations latérales poulie', type: 'muscu' },
+      { id: 'epaules-elev-lat-machine', nom: 'Élévations latérales machine', type: 'muscu' },
+      { id: 'epaules-elev-front-halt', nom: 'Élévations frontales haltères', type: 'muscu' },
+      { id: 'epaules-elev-front-poulie', nom: 'Élévations frontales poulie', type: 'muscu' },
+      { id: 'epaules-elev-front-barre', nom: 'Élévations frontales barre', type: 'muscu' },
+      { id: 'epaules-oiseau-halt', nom: 'Oiseau haltères (buste penché)', type: 'muscu' },
+      { id: 'epaules-pec-deck-inv', nom: 'Pec deck inversé (deltoïde postérieur)', type: 'muscu' },
+      { id: 'epaules-face-pull', nom: 'Face pull', type: 'muscu' },
+      { id: 'epaules-oiseau-poulies', nom: 'Oiseau poulies croisées', type: 'muscu' },
+      { id: 'epaules-tirage-menton-barre', nom: 'Tirage menton barre', type: 'muscu' },
+      { id: 'epaules-tirage-menton-poulie', nom: 'Tirage menton poulie', type: 'muscu' },
+      { id: 'epaules-elev-lat-elastique', nom: 'Élévations latérales élastique', type: 'muscu' },
+      { id: 'epaules-rotation-ext-elastique', nom: 'Rotation externe élastique', type: 'muscu' },
+      { id: 'epaules-rotation-ext-poulie', nom: 'Rotation externe poulie', type: 'muscu' },
+      { id: 'epaules-dev-kettlebell', nom: 'Développé épaules kettlebell', type: 'muscu' }
+    ]
+  },
+  trapezes: {
+    label: 'Trapèzes', icon: '🏔️', exos: [
+      { id: 'trapezes-shrugs-barre', nom: 'Shrugs barre', type: 'muscu' },
+      { id: 'trapezes-shrugs-halt', nom: 'Shrugs haltères', type: 'muscu' },
+      { id: 'trapezes-shrugs-machine', nom: 'Shrugs machine', type: 'muscu' },
+      { id: 'trapezes-shrugs-guidee', nom: 'Shrugs barre guidée', type: 'muscu' },
+      { id: 'trapezes-shrugs-poulie', nom: 'Shrugs poulie basse', type: 'muscu' },
+      { id: 'trapezes-tirage-menton-large', nom: 'Tirage menton prise large', type: 'muscu' },
+      { id: 'trapezes-farmer-walk', nom: 'Farmer walk (marche du fermier)', type: 'muscu' },
+      { id: 'trapezes-rowing-barre-ecarte', nom: 'Rowing barre coudes écartés', type: 'muscu' },
+      { id: 'trapezes-shrugs-kettlebell', nom: 'Shrugs kettlebell', type: 'muscu' }
     ]
   },
   biceps: {
-    label: 'Biceps', icon: '💪',
-    exos: [
-      { id: 'bi_barre',   nom: 'Curl barre',           variante: '' },
-      { id: 'bi_ez',      nom: 'Curl barre EZ',         variante: '' },
-      { id: 'bi_halt',    nom: 'Curl haltères',         variante: '' },
-      { id: 'bi_marteau', nom: 'Curl marteau',          variante: '' },
-      { id: 'bi_concent', nom: 'Curl concentration',    variante: '' },
-      { id: 'bi_cable',   nom: 'Curl câble',            variante: '' },
-      { id: 'bi_mac',     nom: 'Curl machine',          variante: '' },
-      { id: 'bi_incline', nom: 'Curl incliné',          variante: '' }
+    label: 'Biceps', icon: '💪', exos: [
+      { id: 'biceps-curl-barre-droite', nom: 'Curl barre droite', type: 'muscu' },
+      { id: 'biceps-curl-barre-ez', nom: 'Curl barre EZ', type: 'muscu' },
+      { id: 'biceps-curl-halt', nom: 'Curl haltères', type: 'muscu' },
+      { id: 'biceps-curl-alterne-halt', nom: 'Curl alterné haltères', type: 'muscu' },
+      { id: 'biceps-curl-marteau', nom: 'Curl marteau', type: 'muscu' },
+      { id: 'biceps-curl-incline-halt', nom: 'Curl incliné haltères', type: 'muscu' },
+      { id: 'biceps-curl-concentre', nom: 'Curl concentré', type: 'muscu' },
+      { id: 'biceps-curl-pupitre-ez', nom: 'Curl pupitre barre EZ', type: 'muscu' },
+      { id: 'biceps-curl-pupitre-machine', nom: 'Curl pupitre machine', type: 'muscu' },
+      { id: 'biceps-curl-poulie-basse', nom: 'Curl poulie basse', type: 'muscu' },
+      { id: 'biceps-curl-marteau-corde', nom: 'Curl marteau corde', type: 'muscu' },
+      { id: 'biceps-curl-poulies-hautes', nom: 'Curl poulies hautes vis-à-vis', type: 'muscu' },
+      { id: 'biceps-curl-araignee', nom: 'Curl araignée (spider curl)', type: 'muscu' },
+      { id: 'biceps-tractions-supination', nom: 'Tractions supination', type: 'muscu' },
+      { id: 'biceps-curl-elastique', nom: 'Curl élastique', type: 'muscu' },
+      { id: 'biceps-curl-kettlebell', nom: 'Curl kettlebell', type: 'muscu' }
     ]
   },
   triceps: {
-    label: 'Triceps', icon: '💪',
-    exos: [
-      { id: 'tri_dips',   nom: 'Dips triceps',           variante: '' },
-      { id: 'tri_nuque',  nom: 'Extension nuque',         variante: '' },
-      { id: 'tri_push',   nom: 'Pushdown câble',          variante: '' },
-      { id: 'tri_corde',  nom: 'Pushdown corde',          variante: '' },
-      { id: 'tri_kick',   nom: 'Kickback',                variante: '' },
-      { id: 'tri_skull',  nom: 'Skull crusher',           variante: '' },
-      { id: 'tri_ext',    nom: 'Extension câble tête',    variante: '' },
-      { id: 'tri_mac',    nom: 'Dips machine',            variante: '' }
+    label: 'Triceps', icon: '💪', exos: [
+      { id: 'triceps-ext-poulie-barre', nom: 'Extension triceps poulie haute barre', type: 'muscu' },
+      { id: 'triceps-ext-poulie-corde', nom: 'Extension triceps corde', type: 'muscu' },
+      { id: 'triceps-ext-poulie-inv', nom: 'Extension triceps prise inversée', type: 'muscu' },
+      { id: 'triceps-ext-tete-poulie', nom: 'Extension au-dessus de la tête poulie', type: 'muscu' },
+      { id: 'triceps-barre-au-front', nom: 'Barre au front', type: 'muscu' },
+      { id: 'triceps-barre-front-halt', nom: 'Barre au front haltères', type: 'muscu' },
+      { id: 'triceps-ext-nuque-halt', nom: 'Extension nuque haltère', type: 'muscu' },
+      { id: 'triceps-kickback-halt', nom: 'Kickback haltère', type: 'muscu' },
+      { id: 'triceps-dev-prise-serree', nom: 'Développé couché prise serrée', type: 'muscu' },
+      { id: 'triceps-dev-prise-serree-guidee', nom: 'Développé prise serrée barre guidée', type: 'muscu' },
+      { id: 'triceps-dips-machine', nom: 'Dips machine', type: 'muscu' },
+      { id: 'triceps-ext-machine', nom: 'Extension triceps machine', type: 'muscu' },
+      { id: 'triceps-dips', nom: 'Dips', type: 'muscu' },
+      { id: 'triceps-dips-bancs', nom: 'Dips entre deux bancs', type: 'muscu' },
+      { id: 'triceps-pompes-diamant', nom: 'Pompes prise serrée (diamant)', type: 'muscu' },
+      { id: 'triceps-ext-elastique', nom: 'Extension triceps élastique', type: 'muscu' }
     ]
   },
-  jambes: {
-    label: 'Jambes', icon: '🦵',
-    exos: [
-      { id: 'jam_squat',     nom: 'Squat',                variante: '' },
-      { id: 'jam_sumo',      nom: 'Squat sumo',           variante: '' },
-      { id: 'jam_legpress',  nom: 'Leg press',            variante: '' },
-      { id: 'jam_fentes',    nom: 'Fentes avant',         variante: '' },
-      { id: 'jam_fentlat',   nom: 'Fentes latérales',     variante: '' },
-      { id: 'jam_rdl',       nom: 'Romanian deadlift',    variante: '' },
-      { id: 'jam_legcurl',   nom: 'Leg curl',             variante: '' },
-      { id: 'jam_legext',    nom: 'Leg extension',        variante: '' },
-      { id: 'jam_mollets',   nom: 'Mollets debout',       variante: '' },
-      { id: 'jam_molassis',  nom: 'Mollets assis',        variante: '' },
-      { id: 'jam_hipthrust', nom: 'Hip thrust',           variante: '' },
-      { id: 'jam_goodmorn',  nom: 'Good morning',         variante: '' }
+  avantbras: {
+    label: 'Avant-bras', icon: '🦾', exos: [
+      { id: 'avantbras-curl-poignets-barre', nom: 'Curl poignets barre', type: 'muscu' },
+      { id: 'avantbras-curl-poignets-halt', nom: 'Curl poignets haltères', type: 'muscu' },
+      { id: 'avantbras-ext-poignets-barre', nom: 'Extension poignets barre', type: 'muscu' },
+      { id: 'avantbras-ext-poignets-halt', nom: 'Extension poignets haltères', type: 'muscu' },
+      { id: 'avantbras-curl-inv-barre', nom: 'Curl inversé barre', type: 'muscu' },
+      { id: 'avantbras-curl-inv-poulie', nom: 'Curl inversé poulie', type: 'muscu' },
+      { id: 'avantbras-pronation-supination', nom: 'Pronation-supination haltère', type: 'muscu' },
+      { id: 'avantbras-suspension-barre', nom: 'Suspension à la barre', type: 'muscu' },
+      { id: 'avantbras-pince-disques', nom: 'Pince (tenue de disques)', type: 'muscu' }
+    ]
+  },
+  dorsaux: {
+    label: 'Dos', icon: '🏋️', exos: [
+      { id: 'dorsaux-tractions-pronation', nom: 'Tractions pronation', type: 'muscu' },
+      { id: 'dorsaux-tractions-neutre', nom: 'Tractions prise neutre', type: 'muscu' },
+      { id: 'dorsaux-tractions-assistees', nom: 'Tractions assistées machine', type: 'muscu' },
+      { id: 'dorsaux-tirage-vert-large', nom: 'Tirage vertical prise large', type: 'muscu' },
+      { id: 'dorsaux-tirage-vert-serre', nom: 'Tirage vertical prise serrée', type: 'muscu' },
+      { id: 'dorsaux-tirage-vert-neutre', nom: 'Tirage vertical prise neutre', type: 'muscu' },
+      { id: 'dorsaux-tirage-vert-nuque', nom: 'Tirage vertical nuque', type: 'muscu' },
+      { id: 'dorsaux-tirage-horiz-bas', nom: 'Tirage horizontal poulie basse', type: 'muscu' },
+      { id: 'dorsaux-tirage-horiz-large', nom: 'Tirage horizontal prise large', type: 'muscu' },
+      { id: 'dorsaux-rowing-barre', nom: 'Rowing barre buste penché', type: 'muscu' },
+      { id: 'dorsaux-rowing-barre-sup', nom: 'Rowing barre supination', type: 'muscu' },
+      { id: 'dorsaux-rowing-tbar', nom: 'Rowing T-bar', type: 'muscu' },
+      { id: 'dorsaux-rowing-halt-unilateral', nom: 'Rowing haltère un bras', type: 'muscu' },
+      { id: 'dorsaux-rowing-halt-penche', nom: 'Rowing haltères buste penché', type: 'muscu' },
+      { id: 'dorsaux-rowing-assis-machine', nom: 'Rowing assis machine', type: 'muscu' },
+      { id: 'dorsaux-tirage-vert-machine', nom: 'Tirage vertical machine', type: 'muscu' },
+      { id: 'dorsaux-rowing-guidee', nom: 'Rowing barre guidée', type: 'muscu' },
+      { id: 'dorsaux-pull-over-poulie', nom: 'Pull-over poulie haute bras tendus', type: 'muscu' },
+      { id: 'dorsaux-tirage-unilat', nom: 'Tirage un bras poulie', type: 'muscu' },
+      { id: 'dorsaux-rowing-inverse', nom: 'Rowing inversé (barre basse)', type: 'muscu' },
+      { id: 'dorsaux-tirage-elastique', nom: 'Tirage élastique', type: 'muscu' },
+      { id: 'dorsaux-rowing-kettlebell', nom: 'Rowing kettlebell', type: 'muscu' }
+    ]
+  },
+  lombaires: {
+    label: 'Lombaires', icon: '🔙', exos: [
+      { id: 'lombaires-ext-banc', nom: 'Extension au banc à lombaires', type: 'muscu' },
+      { id: 'lombaires-ext-machine', nom: 'Extension lombaires machine', type: 'muscu' },
+      { id: 'lombaires-souleve-de-terre', nom: 'Soulevé de terre', type: 'muscu' },
+      { id: 'lombaires-good-morning', nom: 'Good morning barre', type: 'muscu' },
+      { id: 'lombaires-souleve-jambes-tendues', nom: 'Soulevé de terre jambes tendues', type: 'muscu' },
+      { id: 'lombaires-superman', nom: 'Superman au sol', type: 'muscu' },
+      { id: 'lombaires-bird-dog', nom: 'Bird-dog', type: 'muscu' },
+      { id: 'lombaires-tirage-poulie-jambes', nom: 'Tirage poulie entre les jambes', type: 'muscu' },
+      { id: 'lombaires-ext-banc-charge', nom: 'Extension au banc avec charge', type: 'muscu' },
+      { id: 'lombaires-souleve-kettlebell', nom: 'Soulevé de terre kettlebell', type: 'muscu' }
     ]
   },
   abdos: {
-    label: 'Abdos', icon: '🔥',
-    exos: [
-      { id: 'ab_crunch',   nom: 'Crunch',              variante: '' },
-      { id: 'ab_crcable',  nom: 'Crunch câble',         variante: '' },
-      { id: 'ab_planche',  nom: 'Planche',              variante: '' },
-      { id: 'ab_planclat', nom: 'Planche latérale',     variante: '' },
-      { id: 'ab_releve',   nom: 'Relevé de jambes',     variante: '' },
-      { id: 'ab_russian',  nom: 'Russian twist',        variante: '' },
-      { id: 'ab_gainage',  nom: 'Gainage dynamique',    variante: '' },
-      { id: 'ab_roller',   nom: 'Ab roller',            variante: '' },
-      { id: 'ab_mountain', nom: 'Mountain climbers',    variante: '' },
-      { id: 'ab_vups',     nom: 'V-ups',                variante: '' }
+    label: 'Abdos', icon: '🔥', exos: [
+      { id: 'abdos-crunch-sol', nom: 'Crunch au sol', type: 'muscu' },
+      { id: 'abdos-crunch-machine', nom: 'Crunch machine', type: 'muscu' },
+      { id: 'abdos-crunch-poulie', nom: 'Crunch poulie haute', type: 'muscu' },
+      { id: 'abdos-releve-jambes-suspendu', nom: 'Relevé de jambes suspendu', type: 'muscu' },
+      { id: 'abdos-releve-genoux-chaise', nom: 'Relevé de genoux chaise romaine', type: 'muscu' },
+      { id: 'abdos-releve-jambes-sol', nom: 'Relevé de jambes au sol', type: 'muscu' },
+      { id: 'abdos-gainage-planche', nom: 'Gainage planche', type: 'muscu' },
+      { id: 'abdos-gainage-lateral', nom: 'Gainage latéral', type: 'muscu' },
+      { id: 'abdos-russian-twist', nom: 'Russian twist', type: 'muscu' },
+      { id: 'abdos-russian-twist-charge', nom: 'Russian twist avec charge', type: 'muscu' },
+      { id: 'abdos-mountain-climbers', nom: 'Mountain climbers', type: 'muscu' },
+      { id: 'abdos-roulette', nom: 'Roulette abdominale', type: 'muscu' },
+      { id: 'abdos-rotation-machine', nom: 'Rotation du buste machine', type: 'muscu' },
+      { id: 'abdos-rotation-poulie', nom: 'Rotation du buste poulie (woodchopper)', type: 'muscu' },
+      { id: 'abdos-crunch-oblique', nom: 'Crunch oblique', type: 'muscu' },
+      { id: 'abdos-crunch-inverse', nom: 'Crunch inversé', type: 'muscu' },
+      { id: 'abdos-sit-up', nom: 'Sit-up', type: 'muscu' },
+      { id: 'abdos-flexion-lat-halt', nom: 'Flexion latérale haltère', type: 'muscu' },
+      { id: 'abdos-dead-bug', nom: 'Dead bug', type: 'muscu' },
+      { id: 'abdos-pallof-press', nom: 'Pallof press élastique', type: 'muscu' }
+    ]
+  },
+  jambes: {
+    label: 'Jambes', icon: '🦵', exos: [
+      { id: 'jambes-squat-barre', nom: 'Squat barre', type: 'muscu' },
+      { id: 'jambes-squat-avant', nom: 'Squat avant (front squat)', type: 'muscu' },
+      { id: 'jambes-squat-guidee', nom: 'Squat barre guidée', type: 'muscu' },
+      { id: 'jambes-squat-gobelet', nom: 'Squat gobelet', type: 'muscu' },
+      { id: 'jambes-hack-squat', nom: 'Hack squat', type: 'muscu' },
+      { id: 'jambes-presse-cuisses', nom: 'Presse à cuisses', type: 'muscu' },
+      { id: 'jambes-presse-cuisses-unilat', nom: 'Presse à cuisses une jambe', type: 'muscu' },
+      { id: 'jambes-leg-extension', nom: 'Extension de jambes (leg extension)', type: 'muscu' },
+      { id: 'jambes-leg-curl-allonge', nom: 'Flexion de jambes allongé (leg curl)', type: 'muscu' },
+      { id: 'jambes-leg-curl-assis', nom: 'Flexion de jambes assis', type: 'muscu' },
+      { id: 'jambes-fentes-halt', nom: 'Fentes haltères', type: 'muscu' },
+      { id: 'jambes-fentes-barre', nom: 'Fentes barre', type: 'muscu' },
+      { id: 'jambes-fentes-marchees', nom: 'Fentes marchées', type: 'muscu' },
+      { id: 'jambes-fentes-bulgares', nom: 'Fentes bulgares', type: 'muscu' },
+      { id: 'jambes-fentes-guidee', nom: 'Fentes barre guidée', type: 'muscu' },
+      { id: 'jambes-sdr-roumain', nom: 'Soulevé de terre roumain', type: 'muscu' },
+      { id: 'jambes-sdr-roumain-halt', nom: 'Soulevé de terre roumain haltères', type: 'muscu' },
+      { id: 'jambes-adducteurs-machine', nom: 'Adducteurs machine', type: 'muscu' },
+      { id: 'jambes-abducteurs-machine', nom: 'Abducteurs machine', type: 'muscu' },
+      { id: 'jambes-step-up', nom: 'Montée sur banc (step-up)', type: 'muscu' },
+      { id: 'jambes-squat-corps', nom: 'Squat poids du corps', type: 'muscu' },
+      { id: 'jambes-chaise-mur', nom: 'Chaise contre le mur', type: 'muscu' },
+      { id: 'jambes-squat-kettlebell', nom: 'Squat kettlebell', type: 'muscu' },
+      { id: 'jambes-squat-elastique', nom: 'Squat élastique', type: 'muscu' }
+    ]
+  },
+  fessiers: {
+    label: 'Fessiers', icon: '🍑', exos: [
+      { id: 'fessiers-hip-thrust-barre', nom: 'Hip thrust barre', type: 'muscu' },
+      { id: 'fessiers-hip-thrust-machine', nom: 'Hip thrust machine', type: 'muscu' },
+      { id: 'fessiers-hip-thrust-halt', nom: 'Hip thrust haltère', type: 'muscu' },
+      { id: 'fessiers-pont-fessier', nom: 'Pont fessier au sol', type: 'muscu' },
+      { id: 'fessiers-kickback-poulie', nom: 'Kickback fessier poulie', type: 'muscu' },
+      { id: 'fessiers-kickback-machine', nom: 'Kickback fessier machine', type: 'muscu' },
+      { id: 'fessiers-abduction-poulie', nom: 'Abduction hanche poulie', type: 'muscu' },
+      { id: 'fessiers-sdr-sumo', nom: 'Soulevé de terre sumo', type: 'muscu' },
+      { id: 'fessiers-swing-kettlebell', nom: 'Swing kettlebell', type: 'muscu' },
+      { id: 'fessiers-marche-lat-elastique', nom: 'Marche latérale élastique', type: 'muscu' },
+      { id: 'fessiers-abduction-assise-elastique', nom: 'Abduction assise élastique', type: 'muscu' }
+    ]
+  },
+  mollets: {
+    label: 'Mollets', icon: '🦿', exos: [
+      { id: 'mollets-debout-machine', nom: 'Mollets debout machine', type: 'muscu' },
+      { id: 'mollets-assis-machine', nom: 'Mollets assis machine', type: 'muscu' },
+      { id: 'mollets-presse', nom: 'Mollets à la presse', type: 'muscu' },
+      { id: 'mollets-debout-guidee', nom: 'Mollets debout barre guidée', type: 'muscu' },
+      { id: 'mollets-debout-halt', nom: 'Mollets debout haltères', type: 'muscu' },
+      { id: 'mollets-unilat-halt', nom: 'Mollets une jambe haltère', type: 'muscu' },
+      { id: 'mollets-debout-barre', nom: 'Mollets debout barre', type: 'muscu' },
+      { id: 'mollets-corps', nom: 'Mollets debout poids du corps', type: 'muscu' },
+      { id: 'mollets-tibial', nom: 'Tibial antérieur machine', type: 'muscu' }
     ]
   },
   cardio: {
-    label: 'Cardio', icon: '❤️',
-    exos: [
-      { id: 'car_ergo',     nom: 'Ergomètre bras',        variante: '' },
-      { id: 'car_velo',     nom: 'Vélo / Spinning',        variante: '' },
-      { id: 'car_tapis',    nom: 'Tapis de course',        variante: '' },
-      { id: 'car_rameur',   nom: 'Rameur',                 variante: '' },
-      { id: 'car_ellip',    nom: 'Elliptique',             variante: '' },
-      { id: 'car_prop',     nom: 'Propulsion fauteuil',    variante: '' },
-      { id: 'car_natation', nom: 'Natation',               variante: '' },
-      { id: 'car_libre',    nom: 'Cardio libre (chrono)',  variante: '' }
+    label: 'Cardio', icon: '❤️', exos: [
+      { id: 'cardio-course', nom: 'Course à pied', type: 'cardio' },
+      { id: 'cardio-velo', nom: 'Vélo / Spinning', type: 'cardio' },
+      { id: 'cardio-rameur', nom: 'Rameur', type: 'cardio' },
+      { id: 'cardio-elliptique', nom: 'Elliptique', type: 'cardio' },
+      { id: 'cardio-natation', nom: 'Natation', type: 'cardio' },
+      { id: 'cardio-corde-sauter', nom: 'Corde à sauter', type: 'cardio' },
+      { id: 'cardio-stepper', nom: 'Stepper', type: 'cardio' },
+      { id: 'cardio-ski-erg', nom: 'Ski Erg', type: 'cardio' },
+      { id: 'cardio-assault-bike', nom: 'Assault Bike', type: 'cardio' },
+      { id: 'cardio-marche-rapide', nom: 'Marche rapide', type: 'cardio' }
     ]
   }
 };
+
 
 // ── State ──
 var _ohSeancesZoneActive = null;
