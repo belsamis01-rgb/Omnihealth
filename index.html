@@ -5041,7 +5041,7 @@ function pdcPanelHist() {
   var d=new Date();
   var dateVal=d.getFullYear()+'-'+pdcPad(d.getMonth()+1)+'-'+pdcPad(d.getDate());
   var h='<div class="pdc-card"><div class="pdc-card-title">Enregistrer une séance</div>';
-  h+='<div class="pdc-row"><div class="pdc-field"><label class="pdc-label">Max de référence (kg)'+_badgeMax+'</label><input class="pdc-input" type="number" id="pdc-log-ref" inputmode="decimal" step="0.5'+(_hasProf?' style="background:#f0fdf8;border-color:#00c896"':'')+ ' value="'+(_hasProf?_profBarre:'')+'">' + '</div>';
+  h+='<div class="pdc-row"><div class="pdc-field"><label class="pdc-label">Max de référence (kg)'+_badgeMax+'</label><input class="pdc-input" type="number" id="pdc-log-ref" inputmode="decimal" step="0.5" '+(_hasProf?'style="background:#f0fdf8;border-color:#00c896" ':'')+'value="'+(_hasProf?_profBarre:'')+'">' + '</div>';
   h+='<div class="pdc-field"><label class="pdc-label">Date</label><input class="pdc-input" type="date" id="pdc-log-date" value="'+dateVal+'" style="font-size:0.9rem"></div></div>';
   h+='<div class="pdc-field" style="margin-top:8px"><label class="pdc-label">Séries</label><div id="pdc-log-sets"></div>';
   h+='<button class="pdc-add-set" id="pdc-add-set" type="button">+ Ajouter une série</button></div>';
