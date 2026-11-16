@@ -4599,8 +4599,8 @@ function ohMoiModal(titre, corps, onConfirm, confirmLabel, fullScreen) {
 
   var confirmBtn = document.getElementById('oh-modal-confirm-btn');
   if (confirmBtn) confirmBtn.addEventListener('click', function() {
-    modal.remove();
-    if (_ohModalCb) { var cb = _ohModalCb; _ohModalCb = null; cb(); }
+    if (_ohModalCb) { var cb = _ohModalCb; _ohModalCb = null; modal.remove(); cb(); }
+    else { modal.remove(); }
   });
 
   modal.addEventListener('click', function(e) { if (e.target === modal) modal.remove(); });
