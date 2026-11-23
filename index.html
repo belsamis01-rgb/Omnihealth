@@ -1584,6 +1584,10 @@ function ohInitWithSupabase() {
     <span class="nav-icon" aria-hidden="true">👤</span>
     <span>Moi</span>
   </button>
+  <button class="nav-item" onclick="ohSwitchPage('muscu')" role="tab" aria-selected="false" aria-controls="page-muscu" type="button">
+    <span class="nav-icon" aria-hidden="true">💪</span>
+    <span>Muscu</span>
+  </button>
   <button class="nav-item" onclick="ohSwitchPage('paradc')" role="tab" aria-selected="false" aria-controls="page-paradc" type="button">
     <span class="nav-icon" aria-hidden="true">🏋️</span>
     <span>Para DC</span>
@@ -1631,6 +1635,15 @@ function ohInitWithSupabase() {
   </div>
 </div>
 
+<!-- ── PAGE MUSCULATION ── -->
+<div class="page" id="page-muscu" role="tabpanel">
+  <div class="page-header">
+    <div class="page-header-title">Musculation</div>
+    <div class="page-header-sub">Ton journal de séances, dans n'importe quelle salle</div>
+  </div>
+  <div class="page-container" style="padding-top:1rem" id="mus-content"></div>
+</div>
+
 <!-- ── PAGE PARA DC ── -->
 <div class="page" id="page-paradc" role="tabpanel">
   <div class="page-header">
@@ -1638,6 +1651,11 @@ function ohInitWithSupabase() {
     <div class="today-date" style="font-size:0.8rem;color:var(--muted)">JAM Omnisports · Règles WPPO 2025</div>
   </div>
   <div id="pdc-content"></div>
+</div>
+
+<!-- ── PAGE SÉANCES ── -->
+<div class="page" id="page-seances" role="tabpanel">
+  <div id="seances-content"></div>
 </div>
 
 <!-- ═══════════════════════════════════════════
@@ -2338,6 +2356,7 @@ function ohFoodByName(name) {
   for (var i = 0; i < OH_FOODS.length; i++) {
     if (OH_FOODS[i].n === name) return OH_FOODS[i];
   }
+  if (typeof _ohOnlineMap !== 'undefined' && _ohOnlineMap[name]) return _ohOnlineMap[name];
   return null;
 }
 
@@ -2725,6 +2744,7 @@ function ohJournalTabSearch() {
     }
     html += '</div>';
   }
+  if (typeof ohFoodOnlineBlock === 'function') html += ohFoodOnlineBlock();
   return html;
 }
 
@@ -2782,6 +2802,7 @@ function ohJournalRefreshRow(btn, foodName) {
 function ohJournalSelectFood(foodName) {
   _ohJournalFood = ohFoodByName(foodName);
   if (!_ohJournalFood) return;
+  if (typeof ohFoodKeepOnline === 'function') ohFoodKeepOnline(_ohJournalFood);
   _ohJournalQty = 100;
   ohJournalBuildQtyPicker();
 }
@@ -3261,9 +3282,10 @@ function ohTodayRender() {
       else if (_jam >= 2) _f = Math.max(_f, 1.375);
       tdeeVal = Math.round(_bmr * _f);
     }
-    var kcalBrulee  = tdeeVal;
+    var sportJour = (typeof ohSportDay === 'function') ? ohSportDay(musDateKey()) : { seances: 0, minutes: 0, kcal: 0 };
+    var kcalBrulee  = tdeeVal + sportJour.kcal;
     var kcalMangee  = tot.kcal;
-    var kcalRestant = Math.max(0, goalKcal - kcalMangee);
+    var kcalRestant = Math.max(0, goalKcal + sportJour.kcal - kcalMangee);
 
     // ── Score santé (0–100) ──
     var pKcal  = goalKcal > 0 ? Math.min(tot.kcal / goalKcal, 1) : 0;
@@ -3519,6 +3541,7 @@ function ohTodayRender() {
     // ─── Assembler ───
     page.innerHTML = '<div style="padding:1rem 1rem 7rem">'
       + card1
+      + ((typeof ohSportTodayCard === 'function') ? ohSportTodayCard() : '')
       + card2
       + card3
       + card4
@@ -3902,7 +3925,8 @@ function ohDefisRender() {
       +     checked.length + '/' + defi.steps.length + ' &#233;tapes &middot; +' + defi.xp + ' XP'
       +   '</div>'
       +   stepsHTML
-      + '</div>';
+      + '</div>'
+      + ((typeof ohSportTrophiesCard === 'function') ? ohSportTrophiesCard() : '');
 
   } catch(err) {
     c.innerHTML = '<div style="text-align:center;padding:2rem;color:#666">Erreur: ' + (err.message || err) + '</div>';
@@ -4228,6 +4252,11 @@ function ohEditProfile() {
     +     _radioBtn('ep-mobilite', 'actif', '&#128170; Tr&#232;s actif', p.mobilite === 'actif')
     +   '</div>'
     + '</div>'
+    + '<div style="margin-top:1rem;border-top:1px solid #eee;padding-top:0.9rem">'
+    +   '<div style="font-size:0.78rem;font-weight:700;color:#666;margin-bottom:0.5rem">&#127947; Para D&#233;velopp&#233; Couch&#233; (optionnel)</div>'
+    +   '<div style="font-size:0.75rem;color:#999;margin-bottom:0.5rem">Si renseign&#233;, utilis&#233; automatiquement dans Para DC.</div>'
+    +   _formRow('Barre max (kg)', 'number', 'ep-barre-max', p.barreMax || '', 'ex : 130', '0.5', '400')
+    + '</div>'
     + '</div>';
 
   ohMoiModal('&#9999;&#65039; Modifier mon profil', html, function() {
@@ -4253,12 +4282,16 @@ function ohEditProfile() {
     updated.sexe     = sexe;
     updated.mobilite = mob;
     updated.imc      = imc;
+    var barreMaxVal = parseFloat((document.getElementById('ep-barre-max') || {}).value);
+    updated.barreMax = barreMaxVal > 0 ? barreMaxVal : (p.barreMax || null);
     updated.nutGoal  = ohRecalcNutGoal(updated);
 
     localStorage.setItem('oh_profile', JSON.stringify(updated));
     // Recharger la variable globale
     try { OH_profile = JSON.parse(localStorage.getItem('oh_profile')); } catch(e) {}
     ohMoiRender();
+    // Re-rendre Para DC si ouvert, pour propager barreMax/poids/sexe
+    if (document.getElementById('pdc-content')) { try { ohParaDCRender(); } catch(e) {} }
     ohToast('Profil mis à jour ✓');
   }, 'Enregistrer');
 }
@@ -4566,8 +4599,8 @@ function ohMoiModal(titre, corps, onConfirm, confirmLabel, fullScreen) {
 
   var confirmBtn = document.getElementById('oh-modal-confirm-btn');
   if (confirmBtn) confirmBtn.addEventListener('click', function() {
-    modal.remove();
-    if (_ohModalCb) { var cb = _ohModalCb; _ohModalCb = null; cb(); }
+    if (_ohModalCb) { var cb = _ohModalCb; _ohModalCb = null; try { cb(); } finally { modal.remove(); } }
+    else { modal.remove(); }
   });
 
   modal.addEventListener('click', function(e) { if (e.target === modal) modal.remove(); });
@@ -4625,7 +4658,7 @@ function ohSwitchPage(id) {
     }
   }
   window.scrollTo(0, 0);
-  var renders = { today: ohTodayRender, suivi: ohSuiviRender, defis: ohDefisRender, moi: ohMoiRender, paradc: ohParaDCRender };
+  var renders = { today: ohTodayRender, suivi: ohSuiviRender, defis: ohDefisRender, moi: ohMoiRender, paradc: ohParaDCRender, muscu: ohMuscuRender, seances: ohSeancesRender };
   if (renders[id]) setTimeout(renders[id], 30);
 }
 
@@ -4852,11 +4885,11 @@ function pdcBuildHTML() {
 }
 
 // ─── Panel 1RM ───
-function pdcPanelEst() {
+function pdcPanelEst() { var _ep={}; try{_ep=JSON.parse(localStorage.getItem("oh_profile"))||{};}catch(e){} var _estHas=_ep.barreMax>0; var _estLoad=_estHas?_ep.barreMax:120; if(_estHas){_pdcState.reps=1;}
   var h = '<div class="pdc-card">';
   h += '<div class="pdc-card-title">Charge & répétitions</div>';
   h += '<div class="pdc-row">';
-  h += '<div class="pdc-field"><label class="pdc-label">Charge soulevée (kg)</label><input class="pdc-input" type="number" id="pdc-load" inputmode="decimal" min="20" max="400" step="0.5" value="120"></div>';
+  h += '<div class="pdc-field"><label class="pdc-label">Charge soulevée (kg)</label><input class="pdc-input" type="number" id="pdc-load" inputmode="decimal" min="20" max="400" step="0.5" value="'+_estLoad+'"'+(_estHas?' style="background:#f0fdf8;border-color:#00c896"':'')+'></div>';
   h += '<div class="pdc-field"><label class="pdc-label">Arrondi</label><select class="pdc-select" id="pdc-round"><option value="0.5">0,5 kg</option><option value="1" selected>1 kg (WPPO)</option><option value="2.5">2,5 kg</option></select></div>';
   h += '</div>';
   h += '<div class="pdc-field"><label class="pdc-label">Répétitions réalisées</label><div class="pdc-reps" id="pdc-reps">';
@@ -4873,9 +4906,22 @@ function pdcPanelEst() {
 
 // ─── Panel Charges ───
 function pdcPanelWork() {
+  try { OH_profile = JSON.parse(localStorage.getItem('oh_profile')) || OH_profile; } catch(e) {}
+  var _p = (typeof OH_profile !== 'undefined' && OH_profile) ? OH_profile : {};
+  var _profBarre = (_p.barreMax && _p.barreMax > 0) ? _p.barreMax : 140;
+  var _profPoids = (_p.poids && _p.poids > 0) ? _p.poids : 78.4;
+  var _profSexe  = _p.sexe === 'F' ? 'F' : 'M';
+  var _hasProf   = !!_p.barreMax;
+  var _badgeMax  = _hasProf
+    ? '<span style="font-size:0.72rem;color:#00c896;font-weight:600;margin-left:6px">🔗 issu du profil</span>'
+    : '';
+  var _badgePoids = (_p.poids > 0)
+    ? '<span style="font-size:0.72rem;color:#00c896;font-weight:600;margin-left:6px">🔗 issu du profil</span>'
+    : '';
+
   var h = '<div class="pdc-card">';
-  h += '<div class="pdc-card-title">Max de référence</div>';
-  h += '<input class="pdc-input" type="number" id="pdc-target" inputmode="decimal" min="20" max="400" step="0.5" value="140">';
+  h += '<div class="pdc-card-title">Max de référence' + _badgeMax + '</div>';
+  h += '<input class="pdc-input" type="number" id="pdc-target" inputmode="decimal" min="20" max="400" step="0.5" value="' + _profBarre + '"' + (_hasProf ? ' style="background:#f0fdf8;border-color:#00c896"' : '') + '>';
   h += '<p class="pdc-err" id="pdc-err2" style="display:none"></p>';
   h += '</div>';
   h += '<div class="pdc-card"><div class="pdc-card-title">Essais de compétition</div>';
@@ -4883,8 +4929,8 @@ function pdcPanelWork() {
   h += '<div class="pdc-attempts" id="pdc-attempts"></div></div>';
   h += '<div class="pdc-card"><div class="pdc-card-title">Catégorie WPPO 2025</div>';
   h += '<div class="pdc-row">';
-  h += '<div class="pdc-field"><label class="pdc-label">Sexe</label><select class="pdc-select" id="pdc-sex"><option value="F">Femme</option><option value="M" selected>Homme</option></select></div>';
-  h += '<div class="pdc-field"><label class="pdc-label">Poids de corps (kg)</label><input class="pdc-input" type="number" id="pdc-bw" inputmode="decimal" min="25" max="250" step="0.1" value="78.4"></div>';
+  h += '<div class="pdc-field"><label class="pdc-label">Sexe</label><select class="pdc-select" id="pdc-sex"><option value="F"' + (_profSexe==='F'?' selected':'') + '>Femme</option><option value="M"' + (_profSexe==='M'?' selected':'') + '>Homme</option></select></div>';
+  h += '<div class="pdc-field"><label class="pdc-label">Poids de corps (kg)' + _badgePoids + '</label><input class="pdc-input" type="number" id="pdc-bw" inputmode="decimal" min="25" max="250" step="0.1" value="' + _profPoids + '"' + ((_p.poids > 0) ? ' style="background:#f0fdf8;border-color:#00c896"' : '') + '></div>';
   h += '</div><p class="pdc-cat-txt" id="pdc-cat"></p><p class="pdc-cat-sub" id="pdc-cat-sub"></p></div>';
   h += '<div class="pdc-card"><div class="pdc-card-title">Pyramide d\'entraînement</div>';
   h += '<div class="pdc-pyr-types">';
@@ -4902,12 +4948,28 @@ function pdcPanelDots() {
   h += '<button class="pdc-seg-btn'+(  _pdcState.pdMode==='lift' ?' active':'')+'" data-pm="lift"  type="button">Pts → barre</button>';
   h += '<button class="pdc-seg-btn'+(  _pdcState.pdMode==='team' ?' active':'')+'" data-pm="team"  type="button">Équipe</button>';
   h += '</div></div>';
+  try { OH_profile = JSON.parse(localStorage.getItem('oh_profile')) || OH_profile; } catch(e) {}
+  var _pp = (typeof OH_profile !== 'undefined' && OH_profile) ? OH_profile : {};
+  var _ppPoids = (_pp.poids && _pp.poids > 0) ? _pp.poids : 78.4;
+  var _ppSexe  = _pp.sexe === 'F' ? 'F' : 'M';
+  var _ppBadge = (_pp.poids > 0)
+    ? '<span style="font-size:0.72rem;color:#00c896;font-weight:600;margin-left:6px">🔗 profil</span>'
+    : '';
+  var _ppBarre = (_pp.barreMax && _pp.barreMax > 0) ? _pp.barreMax : 0;
+  var _ppHasBarre = _ppBarre > 0;
+  var _ppBarreBadge = _ppHasBarre
+    ? '<span style="font-size:0.72rem;color:#00c896;font-weight:600;margin-left:6px">🔗 issu du profil</span>'
+    : '';
+  var _ppBarreVal = _ppHasBarre ? _ppBarre : (_pdcState.pdStore['score'] !== '150' ? _pdcState.pdStore['score'] : '');
+
   h += '<div id="pdc-pd-single" class="pdc-card" style="'+(  _pdcState.pdMode==='team'?'display:none':'')+'">';
   h += '<div class="pdc-row">';
-  h += '<div class="pdc-field"><label class="pdc-label">Sexe</label><select class="pdc-select" id="pdc-pd-sex"><option value="F">Femme</option><option value="M" selected>Homme</option></select></div>';
-  h += '<div class="pdc-field"><label class="pdc-label">Poids de corps (kg)</label><input class="pdc-input" type="number" id="pdc-pd-bw" inputmode="decimal" step="0.1" value="78.4"></div>';
-  h += '<div class="pdc-field"><label class="pdc-label" id="pdc-pd-val-lbl">'+(  _pdcState.pdMode==='score'?'Barre (kg)':'Score visé (pts)')+'</label>';
-  h += '<input class="pdc-input" type="number" id="pdc-pd-val" inputmode="decimal" step="1" value="'+_pdcState.pdStore[_pdcState.pdMode==='team'?'score':_pdcState.pdMode]+'"></div>';
+  h += '<div class="pdc-field"><label class="pdc-label">Sexe</label><select class="pdc-select" id="pdc-pd-sex"><option value="F"' + (_ppSexe==='F'?' selected':'') + '>Femme</option><option value="M"' + (_ppSexe==='M'?' selected':'') + '>Homme</option></select></div>';
+  h += '<div class="pdc-field"><label class="pdc-label">Poids (kg)' + _ppBadge + '</label><input class="pdc-input" type="number" id="pdc-pd-bw" inputmode="decimal" step="0.1" value="' + _ppPoids + '"' + ((_pp.poids > 0) ? ' style="background:#f0fdf8;border-color:#00c896"' : '') + '></div>';
+  h += '<div class="pdc-field"><label class="pdc-label" id="pdc-pd-val-lbl">'+( _pdcState.pdMode==='score'?('Barre (kg)'+(_pdcState.pdMode==='score'?_ppBarreBadge:'')):'Score visé (pts)')+'</label>';
+  var _pdValCur = _pdcState.pdMode==='score' ? _ppBarreVal : _pdcState.pdStore['lift'];
+  var _pdValStyle = (_pdcState.pdMode==='score' && _ppHasBarre) ? ' style="background:#f0fdf8;border-color:#00c896"' : '';
+  h += '<input class="pdc-input" type="number" id="pdc-pd-val" inputmode="decimal" step="1"' + _pdValStyle + ' value="' + _pdValCur + '"></div>';
   h += '</div>';
   h += '<div class="pdc-big" id="pdc-pd-out">—</div>';
   h += '<p class="pdc-note" id="pdc-pd-note"></p>';
@@ -4977,10 +5039,17 @@ function pdcPanelSuivi() {
 
 // ─── Panel Historique ───
 function pdcPanelHist() {
+  try { OH_profile = JSON.parse(localStorage.getItem('oh_profile')) || OH_profile; } catch(e) {}
+  var _p = (typeof OH_profile !== 'undefined' && OH_profile) ? OH_profile : {};
+  var _profBarre = (_p.barreMax && _p.barreMax > 0) ? _p.barreMax : 0;
+  var _hasProf = _profBarre > 0;
+  var _badgeMax = _hasProf
+    ? '<span style="font-size:0.72rem;color:#00c896;font-weight:600;margin-left:6px">🔗 issu du profil</span>'
+    : '';
   var d=new Date();
   var dateVal=d.getFullYear()+'-'+pdcPad(d.getMonth()+1)+'-'+pdcPad(d.getDate());
   var h='<div class="pdc-card"><div class="pdc-card-title">Enregistrer une séance</div>';
-  h+='<div class="pdc-row"><div class="pdc-field"><label class="pdc-label">Max de référence (kg)</label><input class="pdc-input" type="number" id="pdc-log-ref" inputmode="decimal" step="0.5" value="140"></div>';
+  h+='<div class="pdc-row"><div class="pdc-field"><label class="pdc-label">Max de référence (kg)'+_badgeMax+'</label><input class="pdc-input" type="number" id="pdc-log-ref" inputmode="decimal" step="0.5" '+(_hasProf?'style="background:#f0fdf8;border-color:#00c896" ':'')+'value="'+(_hasProf?_profBarre:'')+'">' + '</div>';
   h+='<div class="pdc-field"><label class="pdc-label">Date</label><input class="pdc-input" type="date" id="pdc-log-date" value="'+dateVal+'" style="font-size:0.9rem"></div></div>';
   h+='<div class="pdc-field" style="margin-top:8px"><label class="pdc-label">Séries</label><div id="pdc-log-sets"></div>';
   h+='<button class="pdc-add-set" id="pdc-add-set" type="button">+ Ajouter une série</button></div>';
@@ -4997,13 +5066,15 @@ function pdcPanelHist() {
       var dateStr=entry.date||'';
       var headLabel=dateStr;
       try{var dp=pdcParseKey(dateStr);headLabel=pdcPad(dp.d)+'/'+pdcPad(dp.m)+'/'+dp.y;}catch(e){}
-      var bestStr=isFinite(entry.best&&entry.best.est)?pdcFmtKg(entry.best.est)+' kg':'';
+      var pb=entry.best||{};
+      var bestStr=(pb.kg>0)?pdcFmtKg(pb.kg)+' kg × '+(pb.reps||1):'';
+      if(pb.est>0) bestStr+='<div style="font-size:0.68rem;font-weight:600;color:var(--muted);text-align:right">max estimé '+pdcFmtKg(pb.est)+' kg</div>';
       h+='<div class="pdc-hist-entry"><div class="pdc-hist-head" data-pdc-hist="'+idx+'">';
       h+='<div class="pdc-hist-date">'+headLabel+(entry.ref?' · réf: '+pdcFmtKg(entry.ref)+' kg':'')+'</div>';
       h+='<div class="pdc-hist-best">'+bestStr+'</div><div class="pdc-hist-chev">▼</div></div>';
       h+='<div class="pdc-hist-body" id="pdc-hbody-'+idx+'">';
       entry.sets.forEach(function(s,si){
-        h+='<div class="pdc-hist-set"><span class="pdc-hist-badge">S'+(si+1)+'</span>'+pdcFmtKg(s.kg)+' kg × '+s.reps+' rép. → <b>'+pdcFmt(pdcEst(s.kg,s.reps))+' kg</b></div>';
+        h+='<div class="pdc-hist-set"><span class="pdc-hist-badge">S'+(si+1)+'</span>'+pdcFmtKg(s.kg)+' kg × '+s.reps+' rép.'+(isFinite(pdcEst(s.kg,s.reps))?' → max estimé <b>'+pdcFmt(pdcEst(s.kg,s.reps))+' kg</b>':'')+'</div>';
       });
       if(entry.notes) h+='<div class="pdc-hist-notes">'+entry.notes+'</div>';
       h+='</div></div>';
@@ -5166,7 +5237,7 @@ function pdcRenderEst() {
   pdcRenderEquiv(max,ri,s);
   // Sync target dans charges si on y va
   var target=document.getElementById('pdc-target');
-  if(target&&isFinite(max)) target.value=max;
+  if(target && isFinite(max) && !(typeof OH_profile!=="undefined" && OH_profile && OH_profile.barreMax>0)) target.value=max;
 }
 
 // ─── Draw bar ───
@@ -5369,6 +5440,1856 @@ function pdcLogSave() {
   _pdcState.tab='hist';
   ohParaDCRender();
   alert('Séance enregistrée !');
+}
+
+
+// ══════════════════════════════════════════════════════════════
+// MODULE MUSCULATION — journal de séances + bibliothèque d'exercices
+// Préfixe : mus / MUS_ — stockage local : oh_muscu_*
+// ══════════════════════════════════════════════════════════════
+var MUS_GROUPS = [
+  ['pecs','Pectoraux','#f97316'], ['epaules','Épaules','#f59e0b'], ['trapezes','Trapèzes','#a78bfa'],
+  ['biceps','Biceps','#3b82f6'], ['triceps','Triceps','#06b6d4'], ['avantbras','Avant-bras','#64748b'],
+  ['dorsaux','Dorsaux','#00c896'], ['lombaires','Lombaires','#84cc16'], ['abdos','Abdominaux','#ec4899'],
+  ['jambes','Jambes','#8b5cf6'], ['fessiers','Fessiers','#d946ef'], ['mollets','Mollets','#14b8a6']
+];
+var MUS_EQUIP = { B:'Barre', H:'Haltères', M:'Machine', P:'Poulie', C:'Poids du corps', S:'Barre guidée', K:'Kettlebell', E:'Élastique' };
+var MUS_EQUIP_ORDER = ['B','H','M','P','S','C','K','E'];
+var MUS_LIEUX = ['JAM','Fitness Park','Basic-Fit','L\'Orange Bleue','Maison','Autre'];
+
+// Format : 'Équipement:Nom' — l'identifiant est dérivé du groupe et du nom
+var MUS_LIB = {
+  pecs: ['B:Développé couché barre','B:Développé incliné barre','B:Développé décliné barre','H:Développé couché haltères',
+    'H:Développé incliné haltères','H:Développé décliné haltères','S:Développé couché barre guidée','S:Développé incliné barre guidée',
+    'M:Développé assis machine','M:Développé incliné machine','M:Pec deck (butterfly)','H:Écarté couché haltères',
+    'H:Écarté incliné haltères','P:Écarté poulies vis-à-vis','P:Écarté poulies basses','P:Écarté poulies hautes',
+    'C:Pompes','C:Pompes inclinées (mains surélevées)','C:Dips buste penché','H:Pull-over haltère','E:Développé élastique'],
+  epaules: ['B:Développé militaire barre','H:Développé épaules haltères','H:Développé Arnold','M:Développé épaules machine',
+    'S:Développé épaules barre guidée','H:Élévations latérales haltères','P:Élévations latérales poulie','M:Élévations latérales machine',
+    'H:Élévations frontales haltères','P:Élévations frontales poulie','B:Élévations frontales barre','H:Oiseau haltères (buste penché)',
+    'M:Pec deck inversé (deltoïde postérieur)','P:Face pull','P:Oiseau poulies croisées','B:Tirage menton barre',
+    'P:Tirage menton poulie','E:Élévations latérales élastique','E:Rotation externe élastique','P:Rotation externe poulie','K:Développé épaules kettlebell'],
+  trapezes: ['B:Shrugs barre','H:Shrugs haltères','M:Shrugs machine','S:Shrugs barre guidée','P:Shrugs poulie basse',
+    'B:Tirage menton prise large','H:Farmer walk (marche du fermier)','B:Rowing barre coudes écartés','K:Shrugs kettlebell'],
+  biceps: ['B:Curl barre droite','B:Curl barre EZ','H:Curl haltères','H:Curl alterné haltères','H:Curl marteau',
+    'H:Curl incliné haltères','H:Curl concentré','B:Curl pupitre barre EZ','M:Curl pupitre machine','P:Curl poulie basse',
+    'P:Curl marteau corde','P:Curl poulies hautes vis-à-vis','H:Curl araignée (spider curl)','C:Tractions supination','E:Curl élastique','K:Curl kettlebell'],
+  triceps: ['P:Extension triceps poulie haute barre','P:Extension triceps corde','P:Extension triceps prise inversée','P:Extension au-dessus de la tête poulie',
+    'B:Barre au front','H:Barre au front haltères','H:Extension nuque haltère','H:Kickback haltère','B:Développé couché prise serrée',
+    'S:Développé prise serrée barre guidée','M:Dips machine','M:Extension triceps machine','C:Dips','C:Dips entre deux bancs',
+    'C:Pompes prise serrée (diamant)','E:Extension triceps élastique'],
+  avantbras: ['B:Curl poignets barre','H:Curl poignets haltères','B:Extension poignets barre','H:Extension poignets haltères',
+    'B:Curl inversé barre','P:Curl inversé poulie','H:Pronation-supination haltère','C:Suspension à la barre','H:Pince (tenue de disques)'],
+  dorsaux: ['C:Tractions pronation','C:Tractions prise neutre','M:Tractions assistées machine','P:Tirage vertical prise large',
+    'P:Tirage vertical prise serrée','P:Tirage vertical prise neutre','P:Tirage vertical nuque','P:Tirage horizontal poulie basse',
+    'P:Tirage horizontal prise large','B:Rowing barre buste penché','B:Rowing barre supination','B:Rowing T-bar',
+    'H:Rowing haltère un bras','H:Rowing haltères buste penché','M:Rowing assis machine','M:Tirage vertical machine',
+    'S:Rowing barre guidée','P:Pull-over poulie haute bras tendus','P:Tirage un bras poulie','C:Rowing inversé (barre basse)','E:Tirage élastique','K:Rowing kettlebell'],
+  lombaires: ['C:Extension au banc à lombaires','M:Extension lombaires machine','B:Soulevé de terre','B:Good morning barre',
+    'B:Soulevé de terre jambes tendues','C:Superman au sol','C:Bird-dog','P:Tirage poulie entre les jambes','H:Extension au banc avec charge','K:Soulevé de terre kettlebell'],
+  abdos: ['C:Crunch au sol','M:Crunch machine','P:Crunch poulie haute','C:Relevé de jambes suspendu','C:Relevé de genoux chaise romaine',
+    'C:Relevé de jambes au sol','C:Gainage planche','C:Gainage latéral','C:Russian twist','H:Russian twist avec charge',
+    'C:Mountain climbers','C:Roulette abdominale','M:Rotation du buste machine','P:Rotation du buste poulie (woodchopper)',
+    'C:Crunch oblique','C:Crunch inversé','C:Sit-up','H:Flexion latérale haltère','C:Dead bug','E:Pallof press élastique'],
+  jambes: ['B:Squat barre','B:Squat avant (front squat)','S:Squat barre guidée','H:Squat gobelet','M:Hack squat',
+    'M:Presse à cuisses','M:Presse à cuisses une jambe','M:Extension de jambes (leg extension)','M:Flexion de jambes allongé (leg curl)',
+    'M:Flexion de jambes assis','H:Fentes haltères','B:Fentes barre','H:Fentes marchées','H:Fentes bulgares',
+    'S:Fentes barre guidée','B:Soulevé de terre roumain','H:Soulevé de terre roumain haltères','M:Adducteurs machine',
+    'M:Abducteurs machine','H:Montée sur banc (step-up)','C:Squat poids du corps','C:Chaise contre le mur','K:Squat kettlebell','E:Squat élastique'],
+  fessiers: ['B:Hip thrust barre','M:Hip thrust machine','H:Hip thrust haltère','C:Pont fessier au sol','P:Kickback fessier poulie',
+    'M:Kickback fessier machine','P:Abduction hanche poulie','B:Soulevé de terre sumo','K:Swing kettlebell','E:Marche latérale élastique','E:Abduction assise élastique'],
+  mollets: ['M:Mollets debout machine','M:Mollets assis machine','M:Mollets à la presse','S:Mollets debout barre guidée',
+    'H:Mollets debout haltères','H:Mollets une jambe haltère','B:Mollets debout barre','C:Mollets debout poids du corps','M:Tibial antérieur machine']
+};
+
+// Objectifs d'entraînement : repères classiques de séries, répétitions, intensité et repos
+var MUS_OBJ = [
+  { id:'force', nom:'Gain de force',   reps:[3,6],   series:[3,5], defS:4, defR:5,  charge:'80 % du max et plus', repos:'3 à 5 min',
+    txt:'Charges lourdes, peu de répétitions, longues récupérations.',
+    src:'Les charges d\'au moins 80 % du max sont celles qui développent le mieux la force (ACSM 2026), avec 3 à 5 min de repos entre les séries (ACSM 2009).' },
+  { id:'masse', nom:'Prise de masse',  reps:[8,12],  series:[3,5], defS:3, defR:10, charge:'65 à 80 % du max', repos:'1 à 2 min',
+    txt:'Charges moyennes et beaucoup de volume : vise au moins 10 séries par groupe musculaire et par semaine.',
+    src:'C\'est le volume hebdomadaire qui compte le plus pour le muscle (ACSM 2026). Le muscle se développe aussi avec d\'autres charges, tant que l\'effort est réel (Schoenfeld 2021).' },
+  { id:'explo', nom:'Force explosive', reps:[3,5],   series:[3,5], defS:4, defR:5,  charge:'30 à 70 % du max', repos:'2 à 3 min',
+    txt:'Charges légères à moyennes, poussées le plus vite possible, sans aller à la fatigue.',
+    src:'La puissance se travaille avec des charges modérées, un petit volume et une montée de barre rapide (ACSM 2026).' },
+  { id:'poids', nom:'Perte de poids',  reps:[15,20], series:[3,4], defS:3, defR:15, charge:'40 à 60 % du max', repos:'moins de 90 s',
+    txt:'Séries longues et peu de repos. La perte de poids se joue surtout dans l\'assiette : la musculation sert à garder ton muscle.',
+    src:'Associée à une alimentation contrôlée, la musculation fait perdre de la graisse en préservant le muscle (Lopez 2022). Le format proposé est celui de l\'endurance musculaire (ACSM 2009).' }
+];
+var MUS_SOURCES = [
+  ['fr', 'Sci-Sport · Charge ou répétitions ?', 'Augmenter la charge ou ajouter des répétitions : les deux font progresser sur 8 semaines, avec un léger avantage à la charge pour la force maximale.', 'https://sci-sport.com/surcharge-progressive-mieux-vaut-il-augmenter-la-charge-ou-le-nombre-de-repetitions/'],
+  ['fr', 'Sci-Sport · Volume, force et masse', 'Plus le nombre de séries par semaine est élevé, plus le muscle se développe ; l\'effet est moins net sur la force.', 'https://sci-sport.com/impact-du-volume-dentrainement-sur-la-force-et-lhypertrophie-musculaire/'],
+  ['fr', 'Sci-Sport · Repos entre les séries', 'Étude au développé couché : plus le repos est long, mieux on conserve ses répétitions d\'une série à l\'autre.', 'https://sci-sport.com/impact-de-la-duree-du-repos-inter-series-sur-le-volume-dentrainement/'],
+  ['fr', 'Sci-Sport · Périodisation', 'Méta-analyse : découper l\'entraînement en périodes fait mieux progresser la force maximale ; les débutants n\'ont pas besoin de schémas complexes.', 'https://sci-sport.com/effets-periodisation-intensite-volume-force-hypertrophie-238/'],
+  ['fr', 'Sci-Sport · Vitesse de barre', 'Méta-analyse : régler la charge sur la vitesse d\'exécution développe la force et la puissance avec moins de fatigue.', 'https://sci-sport.com/effet-entrainement-base-sur-la-vitesse-sur-les-performances-260/'],
+  ['fr', 'Sci-Sport · Alléger le volume', 'Réduire ponctuellement le volume ne freine pas les progrès : c\'est le principe sur lequel repose l\'affûtage.', 'https://sci-sport.com/deload-en-musculation-reduire-temporairement-le-volume-freine-t-il-les-gains-270/'],
+  ['fr', 'Sci-Sport · Musculation et déficit calorique', 'Méta-analyse de 59 études : en déficit calorique la force continue de progresser, mais le muscle se construit moins bien ; mieux vaut un déficit modéré.', 'https://sci-sport.com/impact-du-deficit-denergie-sur-les-gains-en-musculation/'],
+  ['fr', 'INSEP · La perte de masse grasse', 'Chapitre d\'un ouvrage de l\'INSEP pour les sportifs : objectifs de perte raisonnables et protéines suffisantes pour garder le muscle.', 'https://books.openedition.org/insep/1233'],
+  ['en', 'ACSM, prise de position 2026', 'Synthèse de 137 revues (plus de 30 000 participants) : force avec des charges lourdes, muscle avec le volume, puissance avec des charges modérées déplacées vite.', 'https://pmc.ncbi.nlm.nih.gov/articles/PMC12965823'],
+  ['en', 'Travis et coll., 2020', 'Affûtage en force athlétique : réduire le volume avant la compétition en gardant des charges lourdes.', 'https://www.ncbi.nlm.nih.gov/pmc/articles/PMC7552788/'],
+  ['en', 'Loturco et coll., 2019', 'Étude menée sur des haltérophiles paralympiques : la vitesse de barre au développé couché reflète fidèlement la charge, surtout au-dessus de 70 % du max.', 'https://doi.org/10.1123/ijspp.2018-0452']
+];
+// Programmes types par période : [groupe, exercice, séries, répétitions, % du max au développé couché (0 = charge libre)]
+var MUS_PROG_REF = 'pecs-developpe-couche-barre';
+var MUS_PROG_ORDER = ['construction', 'force', 'affutage', 'compet'];
+var MUS_PROG = {
+  construction: { nom: 'Période de construction', txt: 'Beaucoup de volume à charges moyennes pour bâtir la base.', seances: [
+    { nom: 'A · Poussée, volume', exos: [['pecs','Développé couché barre',4,8,70], ['pecs','Développé incliné haltères',3,10,0], ['triceps','Dips machine',3,10,0], ['triceps','Extension triceps corde',3,12,0]] },
+    { nom: 'B · Tirage et épaules', exos: [['dorsaux','Tirage vertical prise large',4,10,0], ['dorsaux','Rowing assis machine',3,10,0], ['epaules','Développé épaules haltères',3,10,0], ['epaules','Face pull',3,12,0], ['biceps','Curl haltères',3,12,0]] },
+    { nom: 'C · Poussée, endurance', exos: [['pecs','Développé couché barre',3,10,65], ['triceps','Développé couché prise serrée',3,8,0], ['pecs','Pec deck (butterfly)',3,12,0], ['epaules','Élévations latérales haltères',3,12,0]] }
+  ] },
+  force: { nom: 'Période de force', txt: 'Charges lourdes, peu de répétitions, longues récupérations.', seances: [
+    { nom: 'A · Développé couché lourd', exos: [['pecs','Développé couché barre',5,4,85], ['triceps','Développé couché prise serrée',4,6,0], ['triceps','Barre au front',3,8,0]] },
+    { nom: 'B · Tirage et épaules', exos: [['dorsaux','Tirage vertical prise large',4,6,0], ['dorsaux','Rowing assis machine',4,8,0], ['epaules','Développé épaules haltères',3,8,0], ['epaules','Face pull',3,12,0]] },
+    { nom: 'C · Développé couché, technique', exos: [['pecs','Développé couché barre',4,5,80], ['pecs','Développé incliné barre',3,6,0], ['triceps','Extension triceps poulie haute barre',3,8,0]] }
+  ] },
+  affutage: { nom: 'Affûtage', txt: 'Charges lourdes conservées, volume réduit d\'environ moitié, travail de vitesse.', seances: [
+    { nom: 'A · Lourd et court', exos: [['pecs','Développé couché barre',3,2,90], ['triceps','Développé couché prise serrée',2,5,0]] },
+    { nom: 'B · Entretien du dos', exos: [['dorsaux','Tirage vertical prise large',2,8,0], ['epaules','Face pull',2,12,0]] },
+    { nom: 'C · Vitesse de barre', exos: [['pecs','Développé couché barre',4,3,60], ['triceps','Extension triceps corde',2,10,0]] }
+  ] },
+  compet: { nom: 'Semaine de compétition', txt: 'Deux séances courtes en début de semaine, puis repos jusqu\'au jour J.', seances: [
+    { nom: 'A · Rappel lourd (5 à 6 jours avant)', exos: [['pecs','Développé couché barre',3,2,80]] },
+    { nom: 'B · Vitesse (3 à 4 jours avant)', exos: [['pecs','Développé couché barre',3,3,60]] }
+  ] }
+};
+var _mus = { panel:null, menu:null, newOpen:false, tab:'seance', libGroup:null, libQuery:'', libEquip:'', pick:null, exo:null, detail:null, confirm:null, flash:null, bound:false };
+var _musIndex = null;
+
+// ── Utilitaires ──
+function musEsc(s) { return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+function musNorm(s) { s = String(s || '').toLowerCase(); try { s = s.normalize('NFD').replace(/[̀-ͯ]/g,''); } catch(e) {} return s; }
+function musSlug(s) { return musNorm(s).replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,''); }
+function musPad(n) { return n < 10 ? '0' + n : String(n); }
+function musDateKey(d) { d = d || new Date(); return d.getFullYear() + '-' + musPad(d.getMonth()+1) + '-' + musPad(d.getDate()); }
+function musNum(v) { if (v === null || v === undefined || v === '') return NaN; var n = parseFloat(String(v).replace(',', '.')); return isFinite(n) ? n : NaN; }
+function musClamp(n, lo, hi) { return Math.min(hi, Math.max(lo, n)); }
+function musFmt(n) { return isFinite(n) ? (Math.round(n * 100) / 100).toLocaleString('fr-FR', { maximumFractionDigits: 2 }) : '—'; }
+function musFmtDate(key) {
+  var p = String(key || '').split('-'); if (p.length !== 3) return '';
+  var d = new Date(+p[0], +p[1]-1, +p[2]);
+  if (isNaN(d.getTime())) return '';
+  var j = ['dim.','lun.','mar.','mer.','jeu.','ven.','sam.'][d.getDay()];
+  var m = ['janv.','févr.','mars','avr.','mai','juin','juil.','août','sept.','oct.','nov.','déc.'][d.getMonth()];
+  return j + ' ' + d.getDate() + ' ' + m;
+}
+function musFmtHeure(ts) { var d = new Date(ts); if (isNaN(d.getTime())) return ''; return musPad(d.getHours()) + ' h ' + musPad(d.getMinutes()); }
+function musGroupName(id) { for (var i = 0; i < MUS_GROUPS.length; i++) if (MUS_GROUPS[i][0] === id) return MUS_GROUPS[i][1]; return 'Autre'; }
+function musGroupColor(id) { for (var i = 0; i < MUS_GROUPS.length; i++) if (MUS_GROUPS[i][0] === id) return MUS_GROUPS[i][2]; return '#9098b1'; }
+function musStep(equip) { return (equip === 'H' || equip === 'K') ? 1 : 2.5; }
+
+// ── Stockage ──
+function musGet(key, def) { try { var v = localStorage.getItem(key); if (!v) return def; var o = JSON.parse(v); return o == null ? def : o; } catch(e) { return def; } }
+function musSet(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); return true; } catch(e) { return false; } }
+function musLoadSessions() { var a = musGet('oh_muscu_sessions', []); return Array.isArray(a) ? a.filter(function(s){ return s && Array.isArray(s.exos); }) : []; }
+function musSaveSessions(a) { if (!musSet('oh_muscu_sessions', a) && typeof ohToast === 'function') ohToast('Enregistrement impossible : stockage plein'); }
+function musLoadCurrent() { var c = musGet('oh_muscu_current', null); return (c && Array.isArray(c.exos)) ? c : null; }
+function musSaveCurrent(c) { if (c) musSet('oh_muscu_current', c); else { try { localStorage.removeItem('oh_muscu_current'); } catch(e) {} } }
+function musLoadCustom() { var a = musGet('oh_muscu_custom', []); return Array.isArray(a) ? a.filter(function(x){ return x && x.id && x.nom; }) : []; }
+
+// ── Objectif et compétition ──
+function musObjById(id) { for (var i = 0; i < MUS_OBJ.length; i++) if (MUS_OBJ[i].id === id) return MUS_OBJ[i]; return null; }
+function musObj() { return musObjById(musGet('oh_muscu_objectif', '')); }
+function musLoadCompet() {
+  var c = musGet('oh_muscu_compet', null); if (!c || typeof c !== 'object') return { nom: '', date: '' };
+  return { nom: typeof c.nom === 'string' ? c.nom.slice(0, 60) : '', date: /^\d{4}-\d{2}-\d{2}$/.test(c.date || '') ? c.date : '' };
+}
+function musDaysTo(key) {
+  var p = String(key || '').split('-'); if (p.length !== 3) return NaN;
+  var d = new Date(+p[0], +p[1]-1, +p[2]), n = new Date(), t0 = new Date(n.getFullYear(), n.getMonth(), n.getDate());
+  if (isNaN(d.getTime()) || d.getMonth() !== +p[1]-1) return NaN;
+  return Math.round((d.getTime() - t0.getTime()) / 86400000);
+}
+// Repère de planification selon le temps restant avant la compétition
+function musPhase(days) {
+  if (!isFinite(days)) return null;
+  if (days < 0) return { id: 'passee', nom: 'Compétition passée', txt: 'Pense à saisir la date de la prochaine.', conseil: [] };
+  if (days <= 7) return { id: 'compet', nom: 'Semaine de compétition', txt: 'Séances courtes et légères pour arriver frais sur le plateau, sans dépasser 3 jours d\'arrêt complet avant le jour J.', conseil: ['explo'] };
+  if (days <= 21) return { id: 'affutage', nom: 'Affûtage', txt: 'On garde des charges lourdes mais on réduit le volume d\'environ moitié, et on travaille la vitesse de barre.', conseil: ['force', 'explo'] };
+  if (days <= 84) return { id: 'force', nom: 'Période de force', txt: 'C\'est le moment de monter les charges : priorité au gain de force.', conseil: ['force'] };
+  return { id: 'construction', nom: 'Période de construction', txt: 'La compétition est loin : on construit la base, du muscle puis de la force.', conseil: ['masse', 'force'] };
+}
+function musFmtDelai(days) {
+  if (days === 0) return 'C\'est aujourd\'hui';
+  if (days === 1) return 'Demain';
+  if (days < 0) return 'Il y a ' + (-days) + ' jour' + (days < -1 ? 's' : '');
+  return 'J-' + days + (days >= 14 ? ' · ' + Math.floor(days / 7) + ' semaines' : '');
+}
+
+// ── Programme type ──
+function musProgPhase() {
+  var c = musLoadCompet(), d = c.date ? musDaysTo(c.date) : NaN;
+  if (isFinite(d) && d >= 0) return { id: musPhase(d).id, auto: true };
+  var m = musGet('oh_muscu_phase', 'force');
+  return { id: MUS_PROG[m] ? m : 'force', auto: false };
+}
+function musMax() { var n = musNum(musGet('oh_muscu_max', null)); return n > 0 ? n : NaN; }
+// Max estimé au développé couché à partir des séries enregistrées (même table que l'onglet Para DC)
+function musMaxEstime() {
+  var best = NaN, ss = musLoadSessions();
+  for (var i = 0; i < ss.length; i++) for (var j = 0; j < ss[i].exos.length; j++) {
+    var e = ss[i].exos[j]; if (!e || e.id !== MUS_PROG_REF) continue;
+    var d = musDone(e.series);
+    for (var k = 0; k < d.length; k++) {
+      var kg = musNum(d[k].kg) || 0, r = musNum(d[k].reps); if (!(kg > 0) || r < 1 || r > 10) continue;
+      var est = (typeof pdcEst === 'function' && isFinite(pdcEst(kg, r))) ? pdcEst(kg, r) : kg * (1 + r / 30);
+      if (!isFinite(best) || est > best) best = est;
+    }
+  }
+  return isFinite(best) ? Math.round(best * 2) / 2 : NaN;
+}
+function musProgKg(pct) { var m = musMax(); return (pct > 0 && isFinite(m)) ? Math.round(m * pct / 100 / 2.5) * 2.5 : NaN; }
+function musProgExo(item) { return musFindExo(item[0] + '-' + musSlug(item[1])); }
+function musStartProg(phaseId, idx) {
+  var ph = MUS_PROG[phaseId], se = ph ? ph.seances[idx] : null; if (!se) return null;
+  var cur = musStart(null); cur.programme = ph.nom + ' · ' + se.nom;
+  for (var i = 0; i < se.exos.length; i++) {
+    var it = se.exos[i], ex = musProgExo(it); if (!ex) continue;
+    var kg = musProgKg(it[4]);
+    if (!isFinite(kg)) { var p = musPerfs(ex.id, 1); kg = (it[4] === 0 && p.length) ? (musNum(p[0].series[0].kg) || 0) : NaN; }
+    var series = [];
+    for (var s = 0; s < it[2]; s++) series.push({ kg: isFinite(kg) ? kg : null, reps: it[3], fait: false });
+    cur.exos.push({ id: ex.id, nom: ex.nom, groupe: ex.groupe, equip: ex.equip, series: series });
+  }
+  musSaveCurrent(cur); return cur;
+}
+
+// ── Bibliothèque ──
+function musAllExos() {
+  if (!_musIndex) {
+    _musIndex = [];
+    for (var g = 0; g < MUS_GROUPS.length; g++) {
+      var gid = MUS_GROUPS[g][0], list = MUS_LIB[gid] || [];
+      for (var i = 0; i < list.length; i++) {
+        var eq = list[i].charAt(0), nom = list[i].slice(2);
+        _musIndex.push({ id: gid + '-' + musSlug(nom), nom: nom, groupe: gid, equip: eq });
+      }
+    }
+  }
+  var custom = musLoadCustom();
+  for (var c = 0; c < custom.length; c++) custom[c].perso = true;
+  return _musIndex.concat(custom);
+}
+function musFindExo(id) { var all = musAllExos(); for (var i = 0; i < all.length; i++) if (all[i].id === id) return all[i]; return null; }
+
+// ── Calculs sur l'historique ──
+function musDone(series) { return (series || []).filter(function(s){ return s && s.fait && musNum(s.reps) > 0; }); }
+function musSortedSessions() { return musLoadSessions().sort(function(a, b){ return (b.fin || 0) - (a.fin || 0); }); }
+function musPerfs(exoId, max) {
+  var out = [], ss = musSortedSessions();
+  for (var i = 0; i < ss.length && out.length < (max || 1); i++) {
+    for (var j = 0; j < ss[i].exos.length; j++) {
+      var e = ss[i].exos[j];
+      if (e && e.id === exoId) { var d = musDone(e.series); if (d.length) { out.push({ date: ss[i].date, lieu: ss[i].lieu, series: d }); break; } }
+    }
+  }
+  return out;
+}
+function musBest(exoId) {
+  var best = null, ss = musLoadSessions();
+  for (var i = 0; i < ss.length; i++) for (var j = 0; j < ss[i].exos.length; j++) {
+    var e = ss[i].exos[j]; if (!e || e.id !== exoId) continue;
+    var d = musDone(e.series);
+    for (var k = 0; k < d.length; k++) {
+      var kg = musNum(d[k].kg) || 0, reps = musNum(d[k].reps);
+      if (!best || kg > best.kg || (kg === best.kg && reps > best.reps)) best = { kg: kg, reps: reps, date: ss[i].date };
+    }
+  }
+  return best;
+}
+function musFmtSeries(series) {
+  var d = musDone(series); if (!d.length) return 'aucune série validée';
+  var same = d.every(function(s){ return (musNum(s.kg) || 0) === (musNum(d[0].kg) || 0) && musNum(s.reps) === musNum(d[0].reps); });
+  function one(s) { var kg = musNum(s.kg) || 0; return musFmt(musNum(s.reps)) + (kg > 0 ? ' × ' + musFmt(kg) + ' kg' : ' rép.'); }
+  if (same) { var kg0 = musNum(d[0].kg) || 0; return d.length + ' × ' + musFmt(musNum(d[0].reps)) + (kg0 > 0 ? ' à ' + musFmt(kg0) + ' kg' : ' (sans charge)'); }
+  return d.map(one).join(' · ');
+}
+// Suggestion de progression : si toutes les séries ont tenu les répétitions de la 1re, on monte d'un cran
+function musSuggest(exoId, equip) {
+  var p = musPerfs(exoId, 1); if (!p.length) return null;
+  var d = p[0].series, kgMax = 0, r0 = musNum(d[0].reps), tenu = true, rMin = r0, o = musObj();
+  for (var i = 0; i < d.length; i++) { kgMax = Math.max(kgMax, musNum(d[i].kg) || 0); if (musNum(d[i].reps) < r0) tenu = false; rMin = Math.min(rMin, musNum(d[i].reps)); }
+  if (o && kgMax > 0) {
+    var lo = o.reps[0], hi = o.reps[1];
+    if (rMin >= hi) { var nx = musClamp(kgMax + musStep(equip), 0, 500); return { type: 'both', kg: nx, reps: lo, txt: 'Essaie ' + musFmt(nx) + ' kg sur ' + lo + ' rép. par série' }; }
+    if (rMin < lo) return { type: 'reps', reps: lo, txt: 'Allège un peu pour tenir ' + lo + ' rép. par série' };
+    var cible = musClamp(rMin + 1, lo, hi);
+    return { type: 'both', kg: kgMax, reps: cible, txt: 'Garde ' + musFmt(kgMax) + ' kg et vise ' + cible + ' rép. par série' };
+  }
+  if (kgMax <= 0) return tenu ? { type: 'reps', reps: musClamp(r0 + 1, 1, 100), txt: 'Essaie ' + musFmt(musClamp(r0 + 1, 1, 100)) + ' rép. par série' } : null;
+  if (!tenu) return { type: 'kg', kg: kgMax, txt: 'Reste à ' + musFmt(kgMax) + ' kg et vise ' + musFmt(r0) + ' rép. partout' };
+  var next = musClamp(kgMax + musStep(equip), 0, 500);
+  return { type: 'kg', kg: next, txt: 'Essaie ' + musFmt(next) + ' kg' };
+}
+function musSessionStats(s) {
+  var series = 0, volume = 0, exos = 0;
+  for (var i = 0; i < s.exos.length; i++) {
+    var d = musDone(s.exos[i].series); if (d.length) exos++;
+    for (var k = 0; k < d.length; k++) { series++; volume += (musNum(d[k].kg) || 0) * musNum(d[k].reps); }
+  }
+  var duree = (s.fin && s.debut && s.fin > s.debut) ? Math.round((s.fin - s.debut) / 60000) : 0;
+  return { series: series, volume: Math.round(volume), exos: exos, duree: duree };
+}
+function musWeekStats() {
+  var now = new Date(), dow = now.getDay() === 0 ? 6 : now.getDay() - 1;
+  var lundi = musDateKey(new Date(now.getFullYear(), now.getMonth(), now.getDate() - dow));
+  var ss = musLoadSessions(), n = 0, series = 0, volume = 0, kcal = 0;
+  for (var i = 0; i < ss.length; i++) if (ss[i].date >= lundi) { var st = musSessionStats(ss[i]); n++; series += st.series; volume += st.volume; kcal += musSessionKcal(ss[i]); }
+  return { n: n, series: series, volume: volume, kcal: kcal };
+}
+
+// ── Actions sur la séance ──
+function musNewSeries(exoId) {
+  var p = musPerfs(exoId, 1);
+  if (p.length) return p[0].series.map(function(s){ return { kg: musNum(s.kg) || 0, reps: musNum(s.reps), fait: false }; });
+  var o = musObj(), out = [], n = o ? o.defS : 3;
+  for (var i = 0; i < n; i++) out.push({ kg: null, reps: o ? o.defR : null, fait: false });
+  return out;
+}
+function musMakeEntry(exo) { return { id: exo.id, nom: exo.nom, groupe: exo.groupe, equip: exo.equip, series: musNewSeries(exo.id) }; }
+function musStart(fromSession) {
+  var cur = { id: 's' + Date.now(), date: musDateKey(), debut: Date.now(), lieu: fromSession && fromSession.lieu ? fromSession.lieu : '', objectif: musGet('oh_muscu_objectif', ''), exos: [] };
+  if (fromSession) {
+    for (var i = 0; i < fromSession.exos.length; i++) {
+      var e = fromSession.exos[i]; if (!e || !e.id) continue;
+      var d = musDone(e.series);
+      cur.exos.push({ id: e.id, nom: e.nom, groupe: e.groupe, equip: e.equip,
+        series: d.length ? d.map(function(s){ return { kg: musNum(s.kg) || 0, reps: musNum(s.reps), fait: false }; }) : musNewSeries(e.id) });
+    }
+  }
+  musSaveCurrent(cur); return cur;
+}
+function musFinish() {
+  var cur = musLoadCurrent(); if (!cur) return false;
+  var exos = [];
+  for (var i = 0; i < cur.exos.length; i++) {
+    var d = musDone(cur.exos[i].series);
+    if (d.length) exos.push({ id: cur.exos[i].id, nom: cur.exos[i].nom, groupe: cur.exos[i].groupe, equip: cur.exos[i].equip,
+      series: d.map(function(s){ return { kg: musNum(s.kg) || 0, reps: musNum(s.reps), fait: true }; }) });
+  }
+  if (!exos.length) return false;
+  var s = { id: cur.id, date: cur.date, debut: cur.debut, fin: Date.now(), lieu: cur.lieu || '', objectif: musObjById(cur.objectif) ? cur.objectif : '', programme: typeof cur.programme === 'string' ? cur.programme.slice(0, 120) : '', exos: exos };
+  s.minutes = musSessionMinutes(s); s.kcal = musKcalCalc(s);
+  musAwardsSync(); // rattrapage silencieux des trophées déjà acquis
+  var all = musLoadSessions(); all.push(s); musSaveSessions(all); musSaveCurrent(null);
+  _mus.newAwards = musAwardsSync();
+  return s;
+}
+
+// ── Rendu ──
+function ohMuscuRender() {
+  var cont = document.getElementById('mus-content'); if (!cont) return;
+  musBind(cont);
+  var h = '<div class="mus-wrap">';
+  if (_mus.pick) {
+    var cur = musLoadCurrent(), cible = (_mus.pick.type === 'swap' && cur && cur.exos[_mus.pick.i]) ? cur.exos[_mus.pick.i].nom : '';
+    h += '<div class="mus-banner"><div>' + (cible ? 'Remplacer <strong>' + musEsc(cible) + '</strong> par…' : 'Choisis un exercice à ajouter') + '</div>'
+      + '<button type="button" class="mus-link" data-a="pick-cancel">Annuler</button></div>';
+  } else {
+    h += '<div class="mus-tabs" role="tablist">'
+      + musTabBtn('seance', 'Séance') + musTabBtn('lib', 'Exercices') + musTabBtn('hist', 'Historique') + '</div>';
+  }
+  if (_mus.pick || _mus.tab === 'lib') h += musViewLib();
+  else if (_mus.tab === 'hist') h += musViewHist();
+  else h += musViewSeance();
+  cont.innerHTML = h + '</div>';
+}
+function musTabBtn(id, label) { return '<button type="button" role="tab" aria-selected="' + (_mus.tab === id) + '" class="mus-tab' + (_mus.tab === id ? ' active' : '') + '" data-a="tab" data-v="' + id + '">' + label + '</button>'; }
+function musConfirmLabel(key, label) { return _mus.confirm === key ? 'Confirmer ?' : label; }
+
+function musViewSeance() {
+  var cur = musLoadCurrent();
+  return cur ? musViewCurrent(cur) : musViewHome();
+}
+function musObjCard() {
+  var o = musObj(), c = musLoadCompet(), ph = c.date ? musPhase(musDaysTo(c.date)) : null, h = '';
+  h += '<div class="mus-card"><div class="mus-card-title">Mon objectif</div><div class="mus-obj-grid">';
+  for (var i = 0; i < MUS_OBJ.length; i++) {
+    var on = o && o.id === MUS_OBJ[i].id, rec = ph && ph.conseil.indexOf(MUS_OBJ[i].id) !== -1;
+    h += '<button type="button" class="mus-obj' + (on ? ' active' : '') + '" data-a="obj" data-v="' + MUS_OBJ[i].id + '" aria-pressed="' + (!!on) + '">' + MUS_OBJ[i].nom
+      + (rec ? '<span class="mus-obj-rec">Conseillé</span>' : '') + '</button>';
+  }
+  h += '</div>';
+  if (o) h += '<div class="mus-obj-facts">'
+    + '<span><strong>' + o.series[0] + ' à ' + o.series[1] + '</strong> séries</span><span><strong>' + o.reps[0] + ' à ' + o.reps[1] + '</strong> rép.</span>'
+    + '<span>Repos <strong>' + o.repos + '</strong></span><span><strong>' + o.charge + '</strong></span></div>';
+  h += '<button type="button" class="mus-link mus-link-muted" data-a="src-open" aria-expanded="' + (!!_mus.srcOpen) + '">' + (_mus.srcOpen ? 'Masquer les sources' : 'Sources') + '</button>';
+  if (_mus.srcOpen) {
+    h += '<div class="mus-sources">';
+    for (var lg = 0; lg < 2; lg++) {
+      h += '<div class="mus-card-title" style="margin:12px 0 4px">' + (lg === 0 ? 'Articles en français' : 'Publications d\'origine (en anglais)') + '</div>';
+      for (var k = 0; k < MUS_SOURCES.length; k++) if (MUS_SOURCES[k][0] === (lg === 0 ? 'fr' : 'en'))
+        h += '<a class="mus-source" href="' + MUS_SOURCES[k][3] + '" target="_blank" rel="noopener noreferrer"><strong>' + MUS_SOURCES[k][1] + '</strong><span>' + MUS_SOURCES[k][2] + '</span></a>';
+    }
+    h += '</div>';
+  }
+  return h + '</div>';
+}
+function musCompetCard() {
+  var c = musLoadCompet(), days = c.date ? musDaysTo(c.date) : NaN, ph = musPhase(days), h = '';
+  h += '<div class="mus-card"><div class="mus-card-title">Ma prochaine compétition</div>';
+  if (ph) h += '<div class="mus-compet"><div class="mus-compet-j">' + musFmtDelai(days) + '</div><div class="mus-row-title">' + ph.nom + '</div></div>';
+  h += '<div class="mus-compet-form"><input class="mus-search" id="mus-compet-nom" type="text" maxlength="60" autocomplete="off" placeholder="Nom de la compétition" aria-label="Nom de la compétition" value="' + musEsc(c.nom) + '">'
+    + '<input class="mus-search" id="mus-compet-date" type="date" aria-label="Date de la compétition" value="' + musEsc(c.date) + '"></div>';
+  if (c.nom || c.date) h += '<button type="button" class="mus-link mus-link-muted" data-a="compet-clear">Effacer</button>';
+  return h + '</div>';
+}
+function musProgCard() {
+  var pp = musProgPhase(), ph = MUS_PROG[pp.id], max = musMax(), est = musMaxEstime(), h = '', i, j;
+  h += '<div class="mus-card"><div class="mus-card-title">Mon programme</div>';
+  if (pp.auto) h += '<div class="mus-row-title" style="margin-bottom:10px">' + ph.nom + '</div>';
+  else {
+    h += '<div class="mus-chips" style="margin-bottom:10px">';
+    for (i = 0; i < MUS_PROG_ORDER.length; i++) h += '<button type="button" class="mus-chip' + (pp.id === MUS_PROG_ORDER[i] ? ' active' : '') + '" data-a="phase" data-v="' + MUS_PROG_ORDER[i] + '">' + MUS_PROG[MUS_PROG_ORDER[i]].nom + '</button>';
+    h += '</div>';
+  }
+  h += '<label class="mus-max"><span>Mon max au développé couché (kg)</span><input class="mus-search" id="mus-max" type="text" inputmode="decimal" autocomplete="off" maxlength="6" placeholder="—" value="' + (isFinite(max) ? musEsc(String(max).replace('.', ',')) : '') + '"></label>';
+  if (isFinite(est) && est !== max) h += '<button type="button" class="mus-link" data-a="max-est">Utiliser mon max estimé : ' + musFmt(est) + ' kg</button>';
+  for (i = 0; i < ph.seances.length; i++) {
+    h += '<div class="mus-prog"><div class="mus-row-title">' + ph.seances[i].nom + '</div>';
+    for (j = 0; j < ph.seances[i].exos.length; j++) {
+      var it = ph.seances[i].exos[j], kg = musProgKg(it[4]);
+      h += '<div class="mus-perf"><span>' + it[1] + '</span><span>' + it[2] + ' × ' + it[3] + (it[4] ? ' à ' + (isFinite(kg) ? musFmt(kg) + ' kg' : it[4] + ' %') : '') + '</span></div>';
+    }
+    h += '<button type="button" class="mus-btn mus-btn-sec" data-a="prog-start" data-v="' + pp.id + '" data-i="' + i + '">Lancer</button></div>';
+  }
+  return h + '</div>';
+}
+function musNavRow(id, label, val) {
+  return '<button type="button" class="mus-row mus-nav" data-a="panel" data-v="' + id + '"><span class="mus-nav-lbl">' + label + '</span><span class="mus-nav-val">' + val + '</span><span class="mus-chev" aria-hidden="true">›</span></button>';
+}
+function musViewHome() {
+  if (_mus.panel === 'obj' || _mus.panel === 'compet' || _mus.panel === 'prog') {
+    return '<div class="mus-lib-head"><button type="button" class="mus-link" data-a="panel" data-v="">‹ Retour</button></div>'
+      + (_mus.panel === 'obj' ? musObjCard() : _mus.panel === 'compet' ? musCompetCard() : musProgCard());
+  }
+  var ss = musSortedSessions(), w = musWeekStats(), o = musObj(), c = musLoadCompet(), days = c.date ? musDaysTo(c.date) : NaN, pp = musProgPhase(), h = '';
+  h += '<button type="button" class="mus-btn mus-btn-main mus-btn-big" data-a="start">Démarrer une séance</button>';
+  if (ss.length) h += '<button type="button" class="mus-btn mus-btn-sec" data-a="redo" data-v="' + musEsc(ss[0].id) + '">Refaire la dernière séance</button>';
+  h += '<div class="mus-card mus-list" style="margin-top:14px">'
+    + musNavRow('obj', 'Objectif', o ? o.nom : 'À choisir')
+    + musNavRow('compet', 'Compétition', isFinite(days) ? (days < 0 ? 'Passée' : days === 0 ? 'Aujourd\'hui' : 'J-' + days) : 'Ajouter')
+    + musNavRow('prog', 'Programme', MUS_PROG[pp.id].nom) + '</div>';
+  h += '<div class="mus-card"><div class="mus-card-title">Cette semaine</div><div class="mus-stats">'
+    + '<div><div class="mus-stat-val">' + w.n + '</div><div class="mus-stat-lbl">séance' + (w.n > 1 ? 's' : '') + '</div></div>'
+    + '<div><div class="mus-stat-val">' + musFmt(w.volume) + '</div><div class="mus-stat-lbl">kg soulevés</div></div>'
+    + '<div><div class="mus-stat-val">' + musFmt(w.kcal) + '</div><div class="mus-stat-lbl">kcal dépensées</div></div></div></div>';
+  return h;
+}
+function musSessionRow(s) {
+  var st = musSessionStats(s), noms = s.exos.slice(0, 3).map(function(e){ return musEsc(e.nom); }).join(', ') + (s.exos.length > 3 ? '…' : '');
+  return '<button type="button" class="mus-row" data-a="detail" data-v="' + musEsc(s.id) + '">'
+    + '<div class="mus-row-main"><div class="mus-row-title">' + musFmtDate(s.date) + (s.lieu ? ' · ' + musEsc(s.lieu) : '') + '</div>'
+    + '<div class="mus-row-sub">' + st.exos + ' exercice' + (st.exos > 1 ? 's' : '') + ' · ' + st.series + ' série' + (st.series > 1 ? 's' : '') + (st.duree ? ' · ' + st.duree + ' min' : '') + '</div>'
+    + '<div class="mus-row-sub">' + noms + '</div></div><span class="mus-chev" aria-hidden="true">›</span></button>';
+}
+function musViewCurrent(cur) {
+  var o = musObjById(cur.objectif), h = '<div class="mus-card"><div class="mus-card-title">' + (cur.programme ? musEsc(cur.programme) : 'Séance en cours') + '</div>'
+    + '<select class="mus-search" id="mus-lieu" aria-label="Salle" style="margin-bottom:0"><option value="">Où t\'entraînes-tu ?</option>';
+  for (var l = 0; l < MUS_LIEUX.length; l++) h += '<option value="' + musEsc(MUS_LIEUX[l]) + '"' + (cur.lieu === MUS_LIEUX[l] ? ' selected' : '') + '>' + musEsc(MUS_LIEUX[l]) + '</option>';
+  h += '</select>';
+  if (o) h += '<div class="mus-last" style="margin:8px 0 0">' + o.nom + ' · ' + o.reps[0] + ' à ' + o.reps[1] + ' rép. · repos ' + o.repos + '</div>';
+  h += '</div>';
+  _mus.noSug = !!cur.programme; // en séance de programme, la charge prescrite prime sur la suggestion
+  for (var i = 0; i < cur.exos.length; i++) h += musExoCard(cur.exos[i], i);
+  h += '<button type="button" class="mus-btn mus-btn-sec" data-a="pick-add">+ Ajouter un exercice</button>';
+  if (cur.exos.length) h += '<button type="button" class="mus-btn mus-btn-main" data-a="finish">Terminer la séance</button>';
+  h += '<button type="button" class="mus-btn mus-btn-ghost" data-a="abandon">' + musConfirmLabel('abandon', 'Abandonner') + '</button>';
+  return h;
+}
+function musExoCard(e, i) {
+  var perf = musPerfs(e.id, 1), sug = _mus.noSug ? null : musSuggest(e.id, e.equip);
+  var h = '<div class="mus-card mus-exo"><div class="mus-exo-head"><span class="mus-dot" style="background:' + musGroupColor(e.groupe) + '"></span>'
+    + '<div class="mus-exo-name">' + musEsc(e.nom) + '<div class="mus-row-sub">' + (perf.length ? 'Dernière fois : ' + musFmtSeries(perf[0].series) : musEsc(musGroupName(e.groupe)) + ' · ' + musEsc(MUS_EQUIP[e.equip] || 'Autre')) + '</div></div>'
+    + '<button type="button" class="mus-more" data-a="menu" data-i="' + i + '" aria-label="Plus d\'options" aria-expanded="' + (_mus.menu === i) + '">⋯</button></div>';
+  if (_mus.menu === i) {
+    h += '<div class="mus-exo-actions">';
+    if (e.series.length > 1) h += '<button type="button" class="mus-link" data-a="set-del" data-i="' + i + '">− Série</button>';
+    h += '<button type="button" class="mus-link" data-a="pick-swap" data-i="' + i + '">Remplacer</button>'
+      + '<button type="button" class="mus-link mus-link-muted" data-a="exo-del" data-i="' + i + '">' + musConfirmLabel('exo-del-' + i, 'Retirer') + '</button></div>';
+  }
+  if (sug) h += '<button type="button" class="mus-sug" data-a="sug" data-i="' + i + '">↗ ' + musEsc(sug.txt) + '</button>';
+  h += '<div class="mus-set-head"><span></span><span>kg</span><span>Rép.</span><span></span></div>';
+  for (var j = 0; j < e.series.length; j++) {
+    var s = e.series[j], kg = musNum(s.kg), reps = musNum(s.reps);
+    h += '<div class="mus-set' + (s.fait ? ' done' : '') + '"><span class="mus-set-n">' + (j + 1) + '</span>'
+      + musStepper('kg', i, j, isFinite(kg) ? kg : '', 'Charge série ' + (j + 1))
+      + musStepper('reps', i, j, isFinite(reps) ? reps : '', 'Répétitions série ' + (j + 1))
+      + '<button type="button" class="mus-check' + (s.fait ? ' on' : '') + '" data-a="check" data-i="' + i + '" data-j="' + j + '" aria-pressed="' + (!!s.fait) + '" aria-label="Valider la série ' + (j + 1) + '">✓</button></div>';
+  }
+  h += '<button type="button" class="mus-link" data-a="set-add" data-i="' + i + '">+ Série</button></div>';
+  return h;
+}
+function musStepper(f, i, j, val, label) {
+  var v = val === '' ? '' : String(val).replace('.', ',');
+  return '<div class="mus-stepper"><button type="button" class="mus-step" data-a="step" data-f="' + f + '" data-d="-1" data-i="' + i + '" data-j="' + j + '" aria-label="Diminuer">−</button>'
+    + '<input class="mus-input" id="mus-' + f + '-' + i + '-' + j + '" data-f="' + f + '" data-i="' + i + '" data-j="' + j + '" type="text" inputmode="decimal" autocomplete="off" maxlength="6" value="' + musEsc(v) + '" placeholder="—" aria-label="' + musEsc(label) + '">'
+    + '<button type="button" class="mus-step" data-a="step" data-f="' + f + '" data-d="1" data-i="' + i + '" data-j="' + j + '" aria-label="Augmenter">+</button></div>';
+}
+
+function musViewLib() {
+  var h = '';
+  if (_mus.exo && !_mus.pick) return musViewExo(_mus.exo);
+  if (!(_mus.pick && _mus.pick.type === 'swap')) {
+    h += '<input class="mus-search" id="mus-search" type="search" autocomplete="off" maxlength="40" placeholder="Rechercher un exercice…" aria-label="Rechercher un exercice" value="' + musEsc(_mus.libQuery) + '">';
+  }
+  return h + '<div id="mus-lib-body">' + musLibBody() + '</div>';
+}
+function musLibBody() {
+  var all = musAllExos(), q = musNorm(_mus.libQuery).trim(), h = '', i;
+  if (q && !(_mus.pick && _mus.pick.type === 'swap')) {
+    var res = all.filter(function(e){ return musNorm(e.nom).indexOf(q) !== -1 || musNorm(musGroupName(e.groupe)).indexOf(q) !== -1; });
+    if (!res.length) return '<div class="mus-empty">Aucun exercice trouvé pour « ' + musEsc(_mus.libQuery) + ' ».</div>';
+    h += '<div class="mus-card mus-list">'; for (i = 0; i < res.length; i++) h += musExoRow(res[i], true); return h + '</div>';
+  }
+  if (!_mus.libGroup) {
+    h += '<div class="mus-grid">';
+    for (i = 0; i < MUS_GROUPS.length; i++) {
+      var gid = MUS_GROUPS[i][0], n = all.filter(function(e){ return e.groupe === gid; }).length;
+      h += '<button type="button" class="mus-group" data-a="group" data-v="' + gid + '"><span class="mus-group-bar" style="background:' + MUS_GROUPS[i][2] + '"></span>'
+        + '<span class="mus-group-name">' + MUS_GROUPS[i][1] + '</span><span class="mus-group-n">' + n + ' exercices</span></button>';
+    }
+    return h + '</div>';
+  }
+  var list = all.filter(function(e){ return e.groupe === _mus.libGroup; }), cur = musLoadCurrent();
+  if (_mus.pick && _mus.pick.type === 'swap' && cur) {
+    var pris = cur.exos.map(function(e){ return e.id; });
+    list = list.filter(function(e){ return pris.indexOf(e.id) === -1; });
+  }
+  var equips = MUS_EQUIP_ORDER.filter(function(k){ return list.some(function(e){ return e.equip === k; }); });
+  h += '<div class="mus-lib-head">';
+  if (!(_mus.pick && _mus.pick.type === 'swap')) h += '<button type="button" class="mus-link" data-a="group" data-v="">‹ Groupes</button>';
+  h += '<strong>' + musEsc(musGroupName(_mus.libGroup)) + '</strong></div><div class="mus-chips">'
+    + '<button type="button" class="mus-chip' + (!_mus.libEquip ? ' active' : '') + '" data-a="equip" data-v="">Tout</button>';
+  for (i = 0; i < equips.length; i++) h += '<button type="button" class="mus-chip' + (_mus.libEquip === equips[i] ? ' active' : '') + '" data-a="equip" data-v="' + equips[i] + '">' + MUS_EQUIP[equips[i]] + '</button>';
+  h += '</div>';
+  if (_mus.libEquip) list = list.filter(function(e){ return e.equip === _mus.libEquip; });
+  if (!list.length) h += '<div class="mus-empty">Aucun exercice ici.</div>';
+  else { h += '<div class="mus-card mus-list">'; for (i = 0; i < list.length; i++) h += musExoRow(list[i], false); h += '</div>'; }
+  if (!_mus.newOpen) return h + '<button type="button" class="mus-link" data-a="new-open">+ Créer un exercice</button>';
+  h += '<div class="mus-card"><div class="mus-card-title">Nouvel exercice</div>'
+    + '<input class="mus-search" id="mus-new-nom" type="text" maxlength="60" autocomplete="off" placeholder="Nom de l\'exercice" aria-label="Nom du nouvel exercice">'
+    + '<select class="mus-search" id="mus-new-equip" aria-label="Équipement">';
+  for (i = 0; i < MUS_EQUIP_ORDER.length; i++) h += '<option value="' + MUS_EQUIP_ORDER[i] + '">' + MUS_EQUIP[MUS_EQUIP_ORDER[i]] + '</option>';
+  h += '</select><button type="button" class="mus-btn mus-btn-sec" data-a="custom-add">Créer</button></div>';
+  return h;
+}
+function musExoRow(e, showGroup) {
+  return '<button type="button" class="mus-row" data-a="exo" data-v="' + musEsc(e.id) + '"><span class="mus-dot" style="background:' + musGroupColor(e.groupe) + '"></span>'
+    + '<div class="mus-row-main"><div class="mus-row-title">' + musEsc(e.nom) + '</div><div class="mus-row-sub">' + (showGroup ? musEsc(musGroupName(e.groupe)) + ' · ' : '') + musEsc(MUS_EQUIP[e.equip] || 'Autre') + (e.perso ? ' · Perso' : '') + '</div></div>'
+    + '<span class="mus-chev" aria-hidden="true">' + (_mus.pick ? '+' : '›') + '</span></button>';
+}
+function musViewExo(id) {
+  var e = musFindExo(id); if (!e) { _mus.exo = null; return musViewLib(); }
+  var best = musBest(id), perfs = musPerfs(id, 5), sug = musSuggest(id, e.equip);
+  var h = '<div class="mus-lib-head"><button type="button" class="mus-link" data-a="exo-back">‹ Retour</button></div>'
+    + '<div class="mus-card"><div class="mus-exo-head"><span class="mus-dot" style="background:' + musGroupColor(e.groupe) + '"></span><div class="mus-exo-name">' + musEsc(e.nom)
+    + '<div class="mus-row-sub">' + musEsc(musGroupName(e.groupe)) + ' · ' + musEsc(MUS_EQUIP[e.equip] || 'Autre') + '</div></div></div>'
+    + '<div class="mus-stats"><div><div class="mus-stat-val">' + (best ? (best.kg > 0 ? musFmt(best.kg) : musFmt(best.reps)) : '—') + '</div><div class="mus-stat-lbl">' + (best && best.kg <= 0 ? 'rép. max' : 'kg · record') + '</div></div>'
+    + '<div><div class="mus-stat-val">' + perfs.length + (perfs.length === 5 ? '+' : '') + '</div><div class="mus-stat-lbl">séance' + (perfs.length > 1 ? 's' : '') + '</div></div></div>';
+  if (sug) h += '<div class="mus-last">Prochaine fois : ' + musEsc(sug.txt) + '</div>';
+  h += '<button type="button" class="mus-btn mus-btn-main" data-a="exo-add" data-v="' + musEsc(e.id) + '">Ajouter à ma séance</button>';
+  if (e.perso) h += '<button type="button" class="mus-btn mus-btn-ghost" data-a="custom-del" data-v="' + musEsc(e.id) + '">' + musConfirmLabel('custom-del', 'Supprimer cet exercice perso') + '</button>';
+  h += '</div><div class="mus-card"><div class="mus-card-title">Dernières performances</div>';
+  if (!perfs.length) h += '<div class="mus-note">Pas encore de série enregistrée sur cet exercice.</div>';
+  for (var i = 0; i < perfs.length; i++) h += '<div class="mus-perf"><span>' + musFmtDate(perfs[i].date) + '</span><span>' + musFmtSeries(perfs[i].series) + '</span></div>';
+  return h + '</div>';
+}
+
+function musViewHist() {
+  var ss = musSortedSessions(), h = '', i;
+  if (_mus.detail) {
+    var s = null; for (i = 0; i < ss.length; i++) if (ss[i].id === _mus.detail) s = ss[i];
+    if (s) return musViewDetail(s);
+    _mus.detail = null;
+  }
+  if (!ss.length) return '<div class="mus-empty">Aucune séance enregistrée pour l\'instant.<br>Ta première séance apparaîtra ici.</div>';
+  h += '<div class="mus-card mus-list">'; for (i = 0; i < ss.length; i++) h += musSessionRow(ss[i]); return h + '</div>';
+}
+function musViewDetail(s) {
+  var st = musSessionStats(s), h = '<div class="mus-lib-head"><button type="button" class="mus-link" data-a="detail-back">‹ Historique</button></div>';
+  if (_mus.flash === s.id) {
+    h += '<div class="mus-flash">Séance enregistrée. Bien joué !';
+    var na = _mus.newAwards || [];
+    for (var a = 0; a < na.length; a++) h += '<div class="mus-flash-award">' + na[a].ico + ' Trophée débloqué : ' + na[a].nom + '</div>';
+    h += '</div>';
+  }
+  h += '<div class="mus-card"><div class="mus-card-title">' + musFmtDate(s.date) + (s.lieu ? ' · ' + musEsc(s.lieu) : '') + (musObjById(s.objectif) ? ' · ' + musObjById(s.objectif).nom : '') + '</div><div class="mus-stats">'
+    + '<div><div class="mus-stat-val">' + st.series + '</div><div class="mus-stat-lbl">série' + (st.series > 1 ? 's' : '') + '</div></div>'
+    + '<div><div class="mus-stat-val">' + musFmt(st.volume) + '</div><div class="mus-stat-lbl">kg soulevés</div></div>'
+    + '<div><div class="mus-stat-val">' + (st.duree || '—') + '</div><div class="mus-stat-lbl">min</div></div>'
+    + '<div><div class="mus-stat-val">' + musFmt(musSessionKcal(s)) + '</div><div class="mus-stat-lbl">kcal</div></div></div>'
+    + (s.programme ? '<div class="mus-last" style="margin:10px 0 0">Programme : <strong>' + musEsc(s.programme) + '</strong></div>' : '') + '</div>';
+  h += '<div class="mus-card">';
+  for (var i = 0; i < s.exos.length; i++) h += '<div class="mus-perf"><span><span class="mus-dot" style="background:' + musGroupColor(s.exos[i].groupe) + '"></span> ' + musEsc(s.exos[i].nom) + '</span><span>' + musFmtSeries(s.exos[i].series) + '</span></div>';
+  h += '</div>';
+  h += '<button type="button" class="mus-btn mus-btn-sec" data-a="redo" data-v="' + musEsc(s.id) + '">Refaire cette séance</button>';
+  h += '<button type="button" class="mus-btn mus-btn-ghost" data-a="sess-del" data-v="' + musEsc(s.id) + '">' + musConfirmLabel('sess-del', 'Supprimer cette séance') + '</button>';
+  return h;
+}
+
+// ── Événements (délégation, attachés une seule fois) ──
+function musToast(msg) { if (typeof ohToast === 'function') ohToast(msg); }
+function musBind(cont) {
+  if (_mus.bound) return; _mus.bound = true;
+  cont.addEventListener('click', function(ev) {
+    var el = ev.target;
+    while (el && el !== cont && !(el.getAttribute && el.getAttribute('data-a'))) el = el.parentNode;
+    if (!el || el === cont) return;
+    musAction(el.getAttribute('data-a'), el);
+  });
+  cont.addEventListener('change', function(ev) {
+    var t = ev.target; if (!t) return;
+    if (t.id === 'mus-compet-nom' || t.id === 'mus-compet-date') {
+      var c = musLoadCompet();
+      if (t.id === 'mus-compet-nom') c.nom = String(t.value).replace(/\s+/g, ' ').trim().slice(0, 60);
+      else c.date = /^\d{4}-\d{2}-\d{2}$/.test(t.value) && isFinite(musDaysTo(t.value)) ? t.value : '';
+      musSet('oh_muscu_compet', c); ohMuscuRender(); return;
+    }
+    if (t.id === 'mus-lieu') { var cl = musLoadCurrent(); if (cl) { cl.lieu = MUS_LIEUX.indexOf(t.value) !== -1 ? t.value : ''; musSaveCurrent(cl); } return; }
+    if (t.id === 'mus-max') {
+      var mx = musNum(t.value); mx = (mx > 0) ? Math.round(musClamp(mx, 1, 500) * 2) / 2 : null;
+      musSet('oh_muscu_max', mx); ohMuscuRender(); return;
+    }
+    if (!t.classList || !t.classList.contains('mus-input')) return;
+    musInputCommit(t);
+  });
+  cont.addEventListener('input', function(ev) {
+    var t = ev.target; if (!t || t.id !== 'mus-search') return;
+    _mus.libQuery = t.value; _mus.libGroup = null; _mus.libEquip = '';
+    var body = document.getElementById('mus-lib-body'); if (body) body.innerHTML = musLibBody();
+  });
+}
+function musFieldLimits(f) { return f === 'kg' ? [0, 500] : [0, 100]; }
+function musInputCommit(t) {
+  var cur = musLoadCurrent(); if (!cur) return;
+  var f = t.getAttribute('data-f'), i = +t.getAttribute('data-i'), j = +t.getAttribute('data-j');
+  if (!cur.exos[i] || !cur.exos[i].series[j] || (f !== 'kg' && f !== 'reps')) return;
+  var n = musNum(t.value), lim = musFieldLimits(f);
+  if (isFinite(n)) { n = musClamp(n, lim[0], lim[1]); if (f === 'reps') n = Math.round(n); else n = Math.round(n * 100) / 100; }
+  cur.exos[i].series[j][f] = isFinite(n) ? n : null;
+  t.value = isFinite(n) ? String(n).replace('.', ',') : '';
+  if (f === 'reps' && !(n > 0) && cur.exos[i].series[j].fait) { cur.exos[i].series[j].fait = false; musSaveCurrent(cur); ohMuscuRender(); return; }
+  musSaveCurrent(cur);
+}
+function musAction(a, el) {
+  var prev = _mus.confirm; _mus.confirm = null;
+  var v = el.getAttribute('data-v'), i = +el.getAttribute('data-i'), j = +el.getAttribute('data-j');
+  var cur = musLoadCurrent(), ss, k;
+  function need(key) { if (prev === key) return true; _mus.confirm = key; ohMuscuRender(); return false; }
+
+  if (a === 'tab') { _mus.tab = v; _mus.exo = null; _mus.detail = null; _mus.flash = null; _mus.panel = null; _mus.menu = null; _mus.newOpen = false; }
+  else if (a === 'panel') { _mus.panel = v || null; _mus.srcOpen = false; }
+  else if (a === 'menu') { _mus.menu = (_mus.menu === i) ? null : i; }
+  else if (a === 'new-open') { _mus.newOpen = true; }
+  else if (a === 'start') { musStart(null); _mus.tab = 'seance'; _mus.panel = null; _mus.menu = null; }
+  else if (a === 'redo') {
+    if (cur) { musToast('Termine ou abandonne d\'abord la séance en cours'); _mus.tab = 'seance'; }
+    else { ss = musLoadSessions(); for (k = 0; k < ss.length; k++) if (ss[k].id === v) { musStart(ss[k]); break; } _mus.tab = 'seance'; _mus.detail = null; _mus.flash = null; }
+  }
+  else if (a === 'obj') {
+    if (!musObjById(v)) return;
+    var nv = (musGet('oh_muscu_objectif', '') === v) ? '' : v;
+    musSet('oh_muscu_objectif', nv); if (cur) { cur.objectif = nv; musSaveCurrent(cur); } _mus.objOpen = false;
+  }
+  else if (a === 'prog-open') { _mus.progOpen = !_mus.progOpen; }
+  else if (a === 'phase') { if (!MUS_PROG[v]) return; musSet('oh_muscu_phase', v); }
+  else if (a === 'max-est') { var me = musMaxEstime(); if (!isFinite(me)) return; musSet('oh_muscu_max', me); }
+  else if (a === 'prog-start') {
+    if (cur) { musToast('Termine ou abandonne d\'abord la séance en cours'); }
+    else {
+      if (!musStartProg(v, i)) return;
+      if (!isFinite(musMax())) musToast('Indique ton max pour calculer les charges');
+    }
+    _mus.tab = 'seance'; _mus.panel = null; _mus.menu = null;
+  }
+  else if (a === 'src-open') { _mus.srcOpen = !_mus.srcOpen; }
+  else if (a === 'obj-open') { _mus.objOpen = !_mus.objOpen; }
+  else if (a === 'compet-clear') { try { localStorage.removeItem('oh_muscu_compet'); } catch(e) {} }
+  else if (a === 'lieu') { if (cur) { cur.lieu = (cur.lieu === v) ? '' : v; musSaveCurrent(cur); } }
+  else if (a === 'step') {
+    if (!cur || !cur.exos[i] || !cur.exos[i].series[j]) return;
+    var f = el.getAttribute('data-f'), d = +el.getAttribute('data-d'), s = cur.exos[i].series[j];
+    var pas = f === 'kg' ? musStep(cur.exos[i].equip) : 1, lim = musFieldLimits(f), val = musNum(s[f]);
+    val = musClamp((isFinite(val) ? val : 0) + d * pas, lim[0], lim[1]);
+    s[f] = Math.round(val * 100) / 100;
+    var wasDone = s.fait; if (f === 'reps' && !(s.reps > 0)) s.fait = false;
+    musSaveCurrent(cur);
+    var inp = document.getElementById('mus-' + f + '-' + i + '-' + j);
+    if (inp && wasDone === s.fait) { inp.value = String(s[f]).replace('.', ','); return; }
+  }
+  else if (a === 'check') {
+    if (!cur || !cur.exos[i] || !cur.exos[i].series[j]) return;
+    var st = cur.exos[i].series[j];
+    if (!st.fait && !(musNum(st.reps) > 0)) { musToast('Indique d\'abord le nombre de répétitions'); return; }
+    st.fait = !st.fait; if (st.fait && !isFinite(musNum(st.kg))) st.kg = 0;
+    musSaveCurrent(cur);
+  }
+  else if (a === 'set-add') {
+    if (!cur || !cur.exos[i]) return;
+    if (cur.exos[i].series.length >= 12) { musToast('12 séries maximum par exercice'); return; }
+    var last = cur.exos[i].series[cur.exos[i].series.length - 1] || { kg: null, reps: null };
+    cur.exos[i].series.push({ kg: last.kg, reps: last.reps, fait: false }); musSaveCurrent(cur);
+  }
+  else if (a === 'set-del') { if (!cur || !cur.exos[i] || cur.exos[i].series.length < 2) return; cur.exos[i].series.pop(); musSaveCurrent(cur); }
+  else if (a === 'sug') {
+    if (!cur || !cur.exos[i]) return;
+    var sg = musSuggest(cur.exos[i].id, cur.exos[i].equip); if (!sg) return;
+    for (k = 0; k < cur.exos[i].series.length; k++) if (!cur.exos[i].series[k].fait) { if (sg.type !== 'reps') cur.exos[i].series[k].kg = sg.kg; if (sg.type !== 'kg') cur.exos[i].series[k].reps = sg.reps; }
+    musSaveCurrent(cur); musToast('Suggestion appliquée aux séries restantes');
+  }
+  else if (a === 'exo-del') { if (!cur || !cur.exos[i]) return; if (!need('exo-del-' + i)) return; cur.exos.splice(i, 1); musSaveCurrent(cur); _mus.menu = null; }
+  else if (a === 'pick-add') { _mus.pick = { type: 'add' }; _mus.libGroup = null; _mus.libEquip = ''; _mus.libQuery = ''; }
+  else if (a === 'pick-swap') { if (!cur || !cur.exos[i]) return; _mus.pick = { type: 'swap', i: i }; _mus.menu = null; _mus.libGroup = cur.exos[i].groupe; _mus.libEquip = ''; _mus.libQuery = ''; }
+  else if (a === 'pick-cancel') { _mus.pick = null; _mus.tab = 'seance'; }
+  else if (a === 'group') { _mus.libGroup = v || null; _mus.libEquip = ''; }
+  else if (a === 'equip') { _mus.libEquip = v || ''; }
+  else if (a === 'exo') {
+    var ex = musFindExo(v); if (!ex) return;
+    if (_mus.pick) {
+      if (!cur) cur = musStart(null);
+      if (cur.exos.some(function(e){ return e.id === ex.id; })) { musToast('Cet exercice est déjà dans ta séance'); _mus.confirm = null; return; }
+      if (_mus.pick.type === 'swap' && cur.exos[_mus.pick.i]) cur.exos[_mus.pick.i] = musMakeEntry(ex);
+      else { if (cur.exos.length >= 30) { musToast('30 exercices maximum par séance'); return; } cur.exos.push(musMakeEntry(ex)); }
+      musSaveCurrent(cur); _mus.pick = null; _mus.tab = 'seance';
+    } else _mus.exo = v;
+  }
+  else if (a === 'exo-back') { _mus.exo = null; }
+  else if (a === 'exo-add') {
+    var e2 = musFindExo(v); if (!e2) return;
+    if (!cur) cur = musStart(null);
+    if (cur.exos.some(function(e){ return e.id === e2.id; })) musToast('Cet exercice est déjà dans ta séance');
+    else if (cur.exos.length >= 30) { musToast('30 exercices maximum par séance'); return; }
+    else { cur.exos.push(musMakeEntry(e2)); musSaveCurrent(cur); }
+    _mus.exo = null; _mus.tab = 'seance';
+  }
+  else if (a === 'custom-add') {
+    var nomEl = document.getElementById('mus-new-nom'), eqEl = document.getElementById('mus-new-equip');
+    var nom = nomEl ? String(nomEl.value).replace(/\s+/g, ' ').trim().slice(0, 60) : '', eq = eqEl && MUS_EQUIP[eqEl.value] ? eqEl.value : 'M';
+    if (nom.length < 2 || !musSlug(nom)) { musToast('Donne un nom à l\'exercice'); return; }
+    if (!_mus.libGroup) return;
+    var nid = _mus.libGroup + '-' + musSlug(nom);
+    if (musFindExo(nid)) { musToast('Cet exercice existe déjà'); return; }
+    var cu = musLoadCustom(); if (cu.length >= 100) { musToast('100 exercices perso maximum'); return; }
+    cu.push({ id: nid, nom: nom, groupe: _mus.libGroup, equip: eq }); musSet('oh_muscu_custom', cu); _mus.newOpen = false; musToast('Exercice ajouté');
+  }
+  else if (a === 'custom-del') { if (!need('custom-del')) return; musSet('oh_muscu_custom', musLoadCustom().filter(function(x){ return x.id !== v; }).map(function(x){ return { id: x.id, nom: x.nom, groupe: x.groupe, equip: x.equip }; })); _mus.exo = null; }
+  else if (a === 'finish') {
+    var done = musFinish();
+    if (!done) { musToast('Valide au moins une série (✓) avant de terminer'); return; }
+    _mus.tab = 'hist'; _mus.detail = done.id; _mus.flash = done.id;
+  }
+  else if (a === 'abandon') { if (!need('abandon')) return; musSaveCurrent(null); _mus.pick = null; _mus.menu = null; }
+  else if (a === 'detail') { _mus.tab = 'hist'; _mus.detail = v; _mus.flash = null; }
+  else if (a === 'detail-back') { _mus.detail = null; _mus.flash = null; }
+  else if (a === 'sess-del') { if (!need('sess-del')) return; musSaveSessions(musLoadSessions().filter(function(x){ return x.id !== v; })); _mus.detail = null; _mus.flash = null; }
+  else return;
+  ohMuscuRender();
+}
+
+
+// ══════════════════════════════════════════════════════════════
+// SPORT : calories dépensées, trophées, cartes Aujourd'hui et Défis
+// ══════════════════════════════════════════════════════════════
+// MET du Compendium des activités physiques 2024 : 3,5 (musculation, exercices multiples) ; 5,0 (circuit, effort modéré)
+var MUS_MET = { defaut: 3.5, circuit: 5.0 };
+function musPoidsCorps() {
+  var p = NaN; try { if (typeof OH_profile !== 'undefined' && OH_profile) p = musNum(OH_profile.poids); } catch(e) {}
+  return (p >= 30 && p <= 250) ? p : 70;
+}
+function musSessionMinutes(s) {
+  var st = musSessionStats(s), parSeries = Math.round(st.series * 2.5), d = st.duree;
+  if (!st.series) return 0;
+  if (!(d >= 5)) d = parSeries;                       // durée inconnue ou trop courte : estimation par série
+  return Math.max(0, Math.min(d, st.series * 6 + 10, 180)); // séance laissée ouverte : plafonnée
+}
+// Dépense nette (au-dessus du repos, déjà comptée dans la dépense quotidienne) = (MET − 1) × poids × heures
+function musKcalFor(met, minutes) { return Math.max(0, Math.round((met - 1) * musPoidsCorps() * minutes / 60)); }
+function musKcalCalc(s) { return musKcalFor(s.objectif === 'poids' ? MUS_MET.circuit : MUS_MET.defaut, musSessionMinutes(s)); }
+function musSessionKcal(s) { var k = musNum(s.kcal); return (isFinite(k) && k >= 0) ? Math.round(k) : musKcalCalc(s); }
+function musPdcHist() {
+  try { if (typeof pdcLoadHist === 'function') { var a = pdcLoadHist(); return Array.isArray(a) ? a.filter(function(e){ return e && Array.isArray(e.sets) && /^\d{4}-\d{2}-\d{2}$/.test(e.date || ''); }) : []; } } catch(e) {}
+  return [];
+}
+function musPdcMinutes(e) { return Math.min(e.sets.length * 3, 90); }
+// Toutes les séances de sport : journal Muscu + journal Para DC
+function musSportEvents() {
+  var out = [], ss = musLoadSessions(), i, k;
+  for (i = 0; i < ss.length; i++) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(ss[i].date || '')) continue;
+    var st = musSessionStats(ss[i]);
+    out.push({ date: ss[i].date, minutes: isFinite(musNum(ss[i].minutes)) ? musNum(ss[i].minutes) : musSessionMinutes(ss[i]), kcal: musSessionKcal(ss[i]), volume: st.volume, prog: !!ss[i].programme });
+  }
+  var pd = musPdcHist();
+  for (i = 0; i < pd.length; i++) {
+    var vol = 0; for (k = 0; k < pd[i].sets.length; k++) vol += (musNum(pd[i].sets[k].kg) || 0) * (musNum(pd[i].sets[k].reps) || 0);
+    var mn = musPdcMinutes(pd[i]);
+    out.push({ date: pd[i].date, minutes: mn, kcal: musKcalFor(MUS_MET.defaut, mn), volume: Math.round(vol), prog: false });
+  }
+  return out;
+}
+function ohSportDay(key) {
+  var ev = musSportEvents(), r = { seances: 0, minutes: 0, kcal: 0 };
+  for (var i = 0; i < ev.length; i++) if (ev[i].date === key) { r.seances++; r.minutes += ev[i].minutes; r.kcal += ev[i].kcal; }
+  r.minutes = Math.round(r.minutes); r.kcal = Math.round(r.kcal);
+  return r;
+}
+function musMonday(key) {
+  var p = key.split('-'), d = new Date(+p[0], +p[1]-1, +p[2]), dow = d.getDay() === 0 ? 6 : d.getDay() - 1;
+  return musDateKey(new Date(d.getFullYear(), d.getMonth(), d.getDate() - dow));
+}
+function musAddDays(key, n) { var p = key.split('-'); return musDateKey(new Date(+p[0], +p[1]-1, +p[2] + n)); }
+function musSportStats() {
+  var ev = musSportEvents(), st = { total: ev.length, volume: 0, maxWeek: 0, run: 0, prs: 0, prog: 0 }, weeks = {}, i;
+  for (i = 0; i < ev.length; i++) { st.volume += ev[i].volume; if (ev[i].prog) st.prog++; var m = musMonday(ev[i].date); weeks[m] = (weeks[m] || 0) + 1; }
+  var keys = Object.keys(weeks).sort(), run = 0;
+  for (i = 0; i < keys.length; i++) {
+    st.maxWeek = Math.max(st.maxWeek, weeks[keys[i]]);
+    run = (i > 0 && musAddDays(keys[i-1], 7) === keys[i]) ? run + 1 : 1;
+    st.run = Math.max(st.run, run);
+  }
+  // Records : une charge supérieure au meilleur précédent sur un même exercice
+  var ss = musLoadSessions().sort(function(a, b){ return (a.fin || 0) - (b.fin || 0); }), best = {};
+  for (i = 0; i < ss.length; i++) for (var j = 0; j < ss[i].exos.length; j++) {
+    var e = ss[i].exos[j]; if (!e || !e.id) continue;
+    var d = musDone(e.series), top = 0; for (var k = 0; k < d.length; k++) top = Math.max(top, musNum(d[k].kg) || 0);
+    if (!(top > 0)) continue;
+    if (best[e.id] > 0 && top > best[e.id]) st.prs++;
+    best[e.id] = Math.max(best[e.id] || 0, top);
+  }
+  return st;
+}
+var MUS_AWARDS = [
+  ['s1',  '🎉', 'Première séance',     'total', 1],
+  ['s5',  '🥉', '5 séances',           'total', 5],
+  ['s10', '🥈', '10 séances',          'total', 10],
+  ['s25', '🥇', '25 séances',          'total', 25],
+  ['s50', '🏆', '50 séances',          'total', 50],
+  ['w3',  '🔥', '3 séances en une semaine', 'maxWeek', 3],
+  ['r4',  '📅', '4 semaines d\'affilée',    'run', 4],
+  ['t1',  '🏋️', '1 tonne soulevée',    'volume', 1000],
+  ['t10', '💪', '10 tonnes soulevées', 'volume', 10000],
+  ['t100','🦾', '100 tonnes soulevées','volume', 100000],
+  ['pr',  '⭐', 'Record battu',        'prs', 1],
+  ['pg',  '🧭', 'Séance de programme', 'prog', 1]
+];
+function musAwards() {
+  var st = musSportStats();
+  return MUS_AWARDS.map(function(a){ var v = st[a[3]] || 0; return { id: a[0], ico: a[1], nom: a[2], val: Math.min(v, a[4]), cible: a[4], ok: v >= a[4] }; });
+}
+// Enregistre les trophées nouvellement acquis et les renvoie
+function musAwardsSync() {
+  var got = musGet('oh_sport_awards', {}); if (!got || typeof got !== 'object' || Array.isArray(got)) got = {};
+  var list = musAwards(), news = [];
+  for (var i = 0; i < list.length; i++) if (list[i].ok && !got[list[i].id]) { got[list[i].id] = musDateKey(); news.push(list[i]); }
+  if (news.length) musSet('oh_sport_awards', got);
+  return news;
+}
+function musNextAward(list) {
+  var best = null;
+  for (var i = 0; i < list.length; i++) if (!list[i].ok && (!best || list[i].val / list[i].cible > best.val / best.cible)) best = list[i];
+  return best;
+}
+function musFmtCible(a) { return a.cible >= 1000 ? musFmt(a.val / 1000) + ' / ' + musFmt(a.cible / 1000) + ' t' : a.val + ' / ' + a.cible; }
+
+// Carte « Sport » de la page Aujourd'hui
+function ohSportTodayCard() {
+  try {
+    var today = musDateKey(), d = ohSportDay(today), lundi = musMonday(today), ev = musSportEvents(), jours = {}, nSem = 0, i;
+    for (i = 0; i < ev.length; i++) if (ev[i].date >= lundi && ev[i].date <= musAddDays(lundi, 6)) { jours[ev[i].date] = 1; nSem++; }
+    var list = musAwards(), acquis = list.filter(function(a){ return a.ok; }), next = musNextAward(list), L = ['L','M','M','J','V','S','D'];
+    var h = '<div class="oh-today-card sp-card"><div class="oh-tc-header"><span class="oh-tc-icon">&#127947;&#65039;</span><span class="oh-tc-title">Sport</span>'
+      + '<span class="oh-tc-badge" style="background:var(--green)">' + nSem + ' cette semaine</span></div>';
+    h += '<div class="sp-today">' + (d.seances
+      ? '<strong>' + d.seances + ' séance' + (d.seances > 1 ? 's' : '') + '</strong> · ' + d.minutes + ' min · <strong>' + d.kcal + ' kcal</strong>'
+      : 'Pas encore de séance aujourd\'hui') + '</div><div class="sp-week">';
+    for (i = 0; i < 7; i++) { var k = musAddDays(lundi, i); h += '<div class="sp-day' + (jours[k] ? ' on' : '') + (k === today ? ' today' : '') + '">' + L[i] + '</div>'; }
+    h += '</div>';
+    if (acquis.length || next) {
+      h += '<div class="sp-troph">';
+      for (i = 0; i < acquis.length; i++) h += '<span title="' + acquis[i].nom + '">' + acquis[i].ico + '</span>';
+      if (next) h += '<div class="sp-next"><div>Prochain trophée : <strong>' + next.nom + '</strong> · ' + musFmtCible(next) + '</div>'
+        + '<div class="sp-bar"><i style="width:' + Math.round(next.val / next.cible * 100) + '%"></i></div></div>';
+      h += '</div>';
+    }
+    if (!d.seances) h += '<button type="button" class="sp-btn" onclick="ohSwitchPage(\'muscu\')">Démarrer une séance</button>';
+    return h + '</div>';
+  } catch(e) { return ''; }
+}
+// Carte « Trophées sport » de la page Défis
+function ohSportTrophiesCard() {
+  try {
+    var list = musAwards(), n = list.filter(function(a){ return a.ok; }).length;
+    var h = '<div class="mus-card animate-in sp-card" style="margin-top:14px"><div class="mus-card-title">&#127941; Trophées sport · ' + n + ' / ' + list.length + '</div><div class="sp-grid">';
+    for (var i = 0; i < list.length; i++) h += '<div class="sp-award' + (list[i].ok ? ' ok' : '') + '"><div class="sp-award-ico">' + list[i].ico + '</div>'
+      + '<div class="sp-award-nom">' + list[i].nom + '</div><div class="sp-award-val">' + (list[i].ok ? 'Débloqué' : musFmtCible(list[i])) + '</div></div>';
+    return h + '</div></div>';
+  } catch(e) { return ''; }
+}
+
+var OH_FOODS_EXTRA = [{"n": "Sandwich grec (kebab, pain)", "ico": "🥙", "cat": "fastfood", "kcal": 213, "prot": 11.0, "gluc": 22.0, "lip": 9.0, "k": "grecque doner döner kebap chawarma"},
+  {"n": "Kebab galette (dürüm)", "ico": "🌯", "cat": "fastfood", "kcal": 226, "prot": 12.0, "gluc": 22.0, "lip": 10.0, "k": "durum grec grecque wrap doner"},
+  {"n": "Kebab frites (barquette)", "ico": "🥙", "cat": "fastfood", "kcal": 240, "prot": 9.0, "gluc": 24.0, "lip": 12.0, "k": "grec grecque assiette"},
+  {"n": "Tacos français (1 viande)", "ico": "🌯", "cat": "fastfood", "kcal": 228, "prot": 10.0, "gluc": 20.0, "lip": 12.0, "k": "french tacos lyonnais"},
+  {"n": "Tacos français (2 viandes)", "ico": "🌯", "cat": "fastfood", "kcal": 241, "prot": 12.0, "gluc": 19.0, "lip": 13.0, "k": "french tacos lyonnais"},
+  {"n": "Panini jambon fromage", "ico": "🥪", "cat": "fastfood", "kcal": 258, "prot": 12.0, "gluc": 30.0, "lip": 10.0, "k": ""},
+  {"n": "Panini poulet", "ico": "🥪", "cat": "fastfood", "kcal": 240, "prot": 13.0, "gluc": 29.0, "lip": 8.0, "k": ""},
+  {"n": "Panini 3 fromages", "ico": "🥪", "cat": "fastfood", "kcal": 285, "prot": 12.0, "gluc": 30.0, "lip": 13.0, "k": "trois"},
+  {"n": "Sandwich jambon beurre", "ico": "🥖", "cat": "fastfood", "kcal": 266, "prot": 11.0, "gluc": 33.0, "lip": 10.0, "k": "parisien baguette"},
+  {"n": "Sandwich poulet crudités", "ico": "🥖", "cat": "fastfood", "kcal": 211, "prot": 11.0, "gluc": 26.0, "lip": 7.0, "k": "baguette"},
+  {"n": "Sandwich thon crudités", "ico": "🥖", "cat": "fastfood", "kcal": 216, "prot": 10.0, "gluc": 26.0, "lip": 8.0, "k": "baguette"},
+  {"n": "Sandwich merguez frites", "ico": "🥖", "cat": "fastfood", "kcal": 286, "prot": 10.0, "gluc": 30.0, "lip": 14.0, "k": ""},
+  {"n": "Sandwich américain (steak frites)", "ico": "🥖", "cat": "fastfood", "kcal": 277, "prot": 11.0, "gluc": 29.0, "lip": 13.0, "k": ""},
+  {"n": "Pan bagnat", "ico": "🥖", "cat": "fastfood", "kcal": 214, "prot": 9.0, "gluc": 22.0, "lip": 10.0, "k": ""},
+  {"n": "Wrap poulet crudités", "ico": "🌯", "cat": "fastfood", "kcal": 208, "prot": 11.0, "gluc": 23.0, "lip": 8.0, "k": ""},
+  {"n": "Bagel saumon fromage frais", "ico": "🥯", "cat": "fastfood", "kcal": 245, "prot": 11.0, "gluc": 30.0, "lip": 9.0, "k": ""},
+  {"n": "Burger maison (steak, cheddar)", "ico": "🍔", "cat": "fastfood", "kcal": 240, "prot": 13.0, "gluc": 20.0, "lip": 12.0, "k": "hamburger cheeseburger"},
+  {"n": "Tenders de poulet", "ico": "🍗", "cat": "fastfood", "kcal": 258, "prot": 17.0, "gluc": 16.0, "lip": 14.0, "k": ""},
+  {"n": "Poulet rôti (rôtisserie)", "ico": "🍗", "cat": "viande", "kcal": 213, "prot": 24.0, "gluc": 0.0, "lip": 13.0, "k": ""},
+  {"n": "Poulet braisé", "ico": "🍗", "cat": "viande", "kcal": 185, "prot": 25.0, "gluc": 1.0, "lip": 9.0, "k": ""},
+  {"n": "Bokit", "ico": "🥙", "cat": "fastfood", "kcal": 281, "prot": 9.0, "gluc": 32.0, "lip": 13.0, "k": "guadeloupe antilles"},
+  {"n": "Accras de morue", "ico": "🧆", "cat": "fastfood", "kcal": 254, "prot": 10.0, "gluc": 22.0, "lip": 14.0, "k": "antilles beignets"},
+  {"n": "Lasagnes bolognaise", "ico": "🍝", "cat": "prepare", "kcal": 143, "prot": 8.0, "gluc": 12.0, "lip": 7.0, "k": "lasagne"},
+  {"n": "Hachis parmentier", "ico": "🥘", "cat": "prepare", "kcal": 120, "prot": 6.5, "gluc": 10.0, "lip": 6.0, "k": ""},
+  {"n": "Gratin dauphinois", "ico": "🥔", "cat": "prepare", "kcal": 138, "prot": 3.5, "gluc": 13.0, "lip": 8.0, "k": ""},
+  {"n": "Gratin de pâtes", "ico": "🍝", "cat": "prepare", "kcal": 167, "prot": 7.0, "gluc": 19.0, "lip": 7.0, "k": ""},
+  {"n": "Quiche lorraine", "ico": "🥧", "cat": "prepare", "kcal": 270, "prot": 9.0, "gluc": 18.0, "lip": 18.0, "k": ""},
+  {"n": "Tarte aux légumes", "ico": "🥧", "cat": "prepare", "kcal": 195, "prot": 5.0, "gluc": 19.0, "lip": 11.0, "k": ""},
+  {"n": "Moussaka", "ico": "🍆", "cat": "prepare", "kcal": 133, "prot": 6.0, "gluc": 7.0, "lip": 9.0, "k": ""},
+  {"n": "Brandade de morue", "ico": "🐟", "cat": "prepare", "kcal": 144, "prot": 8.0, "gluc": 9.0, "lip": 8.5, "k": ""},
+  {"n": "Parmentier de poisson", "ico": "🐟", "cat": "prepare", "kcal": 111, "prot": 6.5, "gluc": 10.0, "lip": 5.0, "k": ""},
+  {"n": "Paella", "ico": "🥘", "cat": "prepare", "kcal": 149, "prot": 8.0, "gluc": 18.0, "lip": 5.0, "k": ""},
+  {"n": "Risotto aux champignons", "ico": "🍚", "cat": "prepare", "kcal": 140, "prot": 3.5, "gluc": 19.0, "lip": 5.5, "k": ""},
+  {"n": "Riz cantonais", "ico": "🍚", "cat": "prepare", "kcal": 165, "prot": 5.0, "gluc": 25.0, "lip": 5.0, "k": ""},
+  {"n": "Nouilles sautées au poulet", "ico": "🍜", "cat": "prepare", "kcal": 149, "prot": 7.0, "gluc": 19.0, "lip": 5.0, "k": ""},
+  {"n": "Pad thaï", "ico": "🍜", "cat": "prepare", "kcal": 170, "prot": 7.0, "gluc": 22.0, "lip": 6.0, "k": "thai"},
+  {"n": "Bo bun", "ico": "🍜", "cat": "prepare", "kcal": 120, "prot": 7.0, "gluc": 15.0, "lip": 3.5, "k": "bobun"},
+  {"n": "Ramen", "ico": "🍜", "cat": "prepare", "kcal": 96, "prot": 5.0, "gluc": 11.0, "lip": 3.5, "k": ""},
+  {"n": "Pho", "ico": "🍜", "cat": "prepare", "kcal": 60, "prot": 4.5, "gluc": 7.0, "lip": 1.5, "k": "soupe vietnamienne"},
+  {"n": "Nems au porc", "ico": "🥠", "cat": "prepare", "kcal": 245, "prot": 7.0, "gluc": 25.0, "lip": 13.0, "k": ""},
+  {"n": "Nems au poulet", "ico": "🥠", "cat": "prepare", "kcal": 227, "prot": 8.0, "gluc": 24.0, "lip": 11.0, "k": ""},
+  {"n": "Rouleau de printemps", "ico": "🥬", "cat": "prepare", "kcal": 114, "prot": 5.0, "gluc": 18.0, "lip": 2.5, "k": ""},
+  {"n": "Raviolis vapeur (gyoza)", "ico": "🥟", "cat": "prepare", "kcal": 178, "prot": 7.0, "gluc": 23.0, "lip": 6.5, "k": "gyozas"},
+  {"n": "Poulet au curry et riz", "ico": "🍛", "cat": "prepare", "kcal": 140, "prot": 8.0, "gluc": 17.0, "lip": 4.5, "k": ""},
+  {"n": "Poulet tikka masala et riz", "ico": "🍛", "cat": "prepare", "kcal": 150, "prot": 8.0, "gluc": 17.0, "lip": 5.5, "k": ""},
+  {"n": "Butter chicken et riz", "ico": "🍛", "cat": "prepare", "kcal": 152, "prot": 7.5, "gluc": 17.0, "lip": 6.0, "k": ""},
+  {"n": "Chili con carne", "ico": "🌶️", "cat": "prepare", "kcal": 113, "prot": 8.0, "gluc": 9.0, "lip": 5.0, "k": ""},
+  {"n": "Bœuf bourguignon", "ico": "🥩", "cat": "prepare", "kcal": 122, "prot": 13.0, "gluc": 4.0, "lip": 6.0, "k": "boeuf"},
+  {"n": "Blanquette de veau", "ico": "🥩", "cat": "prepare", "kcal": 123, "prot": 11.0, "gluc": 4.0, "lip": 7.0, "k": ""},
+  {"n": "Pot-au-feu", "ico": "🥩", "cat": "prepare", "kcal": 92, "prot": 9.0, "gluc": 5.0, "lip": 4.0, "k": ""},
+  {"n": "Poulet basquaise", "ico": "🍗", "cat": "prepare", "kcal": 105, "prot": 11.0, "gluc": 4.0, "lip": 5.0, "k": ""},
+  {"n": "Coq au vin", "ico": "🍗", "cat": "prepare", "kcal": 127, "prot": 13.0, "gluc": 3.0, "lip": 7.0, "k": ""},
+  {"n": "Petit salé aux lentilles", "ico": "🍲", "cat": "prepare", "kcal": 134, "prot": 9.0, "gluc": 11.0, "lip": 6.0, "k": ""},
+  {"n": "Saucisses lentilles", "ico": "🍲", "cat": "prepare", "kcal": 150, "prot": 8.5, "gluc": 11.0, "lip": 8.0, "k": ""},
+  {"n": "Cassoulet", "ico": "🍲", "cat": "prepare", "kcal": 148, "prot": 8.0, "gluc": 11.0, "lip": 8.0, "k": ""},
+  {"n": "Choucroute garnie", "ico": "🍲", "cat": "prepare", "kcal": 121, "prot": 6.0, "gluc": 4.0, "lip": 9.0, "k": ""},
+  {"n": "Tartiflette", "ico": "🧀", "cat": "prepare", "kcal": 175, "prot": 7.0, "gluc": 12.0, "lip": 11.0, "k": ""},
+  {"n": "Raclette (fromage, pommes de terre, charcuterie)", "ico": "🧀", "cat": "prepare", "kcal": 214, "prot": 11.0, "gluc": 11.0, "lip": 14.0, "k": ""},
+  {"n": "Fondue savoyarde (avec pain)", "ico": "🧀", "cat": "prepare", "kcal": 283, "prot": 15.0, "gluc": 22.0, "lip": 15.0, "k": ""},
+  {"n": "Aligot", "ico": "🥔", "cat": "prepare", "kcal": 179, "prot": 7.0, "gluc": 13.0, "lip": 11.0, "k": ""},
+  {"n": "Endives au jambon", "ico": "🥬", "cat": "prepare", "kcal": 104, "prot": 6.5, "gluc": 5.0, "lip": 6.5, "k": ""},
+  {"n": "Tomates farcies", "ico": "🍅", "cat": "prepare", "kcal": 124, "prot": 7.0, "gluc": 7.0, "lip": 7.5, "k": ""},
+  {"n": "Chou farci", "ico": "🥬", "cat": "prepare", "kcal": 112, "prot": 6.5, "gluc": 7.0, "lip": 6.5, "k": ""},
+  {"n": "Ratatouille", "ico": "🍆", "cat": "prepare", "kcal": 53, "prot": 1.0, "gluc": 6.0, "lip": 2.8, "k": ""},
+  {"n": "Purée de pommes de terre", "ico": "🥔", "cat": "prepare", "kcal": 96, "prot": 2.0, "gluc": 14.0, "lip": 3.5, "k": ""},
+  {"n": "Pommes de terre sautées", "ico": "🥔", "cat": "prepare", "kcal": 148, "prot": 2.5, "gluc": 20.0, "lip": 6.5, "k": ""},
+  {"n": "Poêlée de légumes", "ico": "🥦", "cat": "prepare", "kcal": 67, "prot": 2.0, "gluc": 8.0, "lip": 3.0, "k": ""},
+  {"n": "Pâtes carbonara", "ico": "🍝", "cat": "prepare", "kcal": 186, "prot": 7.5, "gluc": 22.0, "lip": 7.5, "k": "pates"},
+  {"n": "Pâtes bolognaise", "ico": "🍝", "cat": "prepare", "kcal": 132, "prot": 7.0, "gluc": 17.0, "lip": 4.0, "k": "pates spaghetti"},
+  {"n": "Pâtes au pesto", "ico": "🍝", "cat": "prepare", "kcal": 200, "prot": 6.0, "gluc": 26.0, "lip": 8.0, "k": "pates"},
+  {"n": "Pâtes au saumon", "ico": "🍝", "cat": "prepare", "kcal": 160, "prot": 7.5, "gluc": 19.0, "lip": 6.0, "k": "pates"},
+  {"n": "Raviolis sauce tomate", "ico": "🍝", "cat": "prepare", "kcal": 92, "prot": 3.5, "gluc": 14.0, "lip": 2.5, "k": ""},
+  {"n": "Gnocchis poêlés", "ico": "🥔", "cat": "prepare", "kcal": 171, "prot": 4.0, "gluc": 32.0, "lip": 3.0, "k": ""},
+  {"n": "Couscous royal", "ico": "🍲", "cat": "prepare", "kcal": 150, "prot": 9.0, "gluc": 15.0, "lip": 6.0, "k": ""},
+  {"n": "Couscous poulet légumes", "ico": "🍲", "cat": "prepare", "kcal": 122, "prot": 7.5, "gluc": 15.0, "lip": 3.5, "k": ""},
+  {"n": "Tajine poulet citron olives", "ico": "🍲", "cat": "prepare", "kcal": 122, "prot": 11.0, "gluc": 5.0, "lip": 6.5, "k": "tagine"},
+  {"n": "Tajine agneau pruneaux", "ico": "🍲", "cat": "prepare", "kcal": 178, "prot": 11.0, "gluc": 12.0, "lip": 9.5, "k": "tagine"},
+  {"n": "Tajine kefta aux œufs", "ico": "🍲", "cat": "prepare", "kcal": 150, "prot": 10.0, "gluc": 4.0, "lip": 10.5, "k": "tagine oeufs"},
+  {"n": "Salade César", "ico": "🥗", "cat": "prepare", "kcal": 150, "prot": 8.0, "gluc": 6.0, "lip": 10.5, "k": "cesar"},
+  {"n": "Salade niçoise", "ico": "🥗", "cat": "prepare", "kcal": 111, "prot": 7.0, "gluc": 5.0, "lip": 7.0, "k": ""},
+  {"n": "Salade de pâtes", "ico": "🥗", "cat": "prepare", "kcal": 161, "prot": 4.5, "gluc": 20.0, "lip": 7.0, "k": "pates"},
+  {"n": "Salade de riz au thon", "ico": "🥗", "cat": "prepare", "kcal": 141, "prot": 6.0, "gluc": 18.0, "lip": 5.0, "k": ""},
+  {"n": "Salade piémontaise", "ico": "🥗", "cat": "prepare", "kcal": 172, "prot": 4.0, "gluc": 12.0, "lip": 12.0, "k": ""},
+  {"n": "Taboulé", "ico": "🥗", "cat": "prepare", "kcal": 147, "prot": 3.5, "gluc": 22.0, "lip": 5.0, "k": ""},
+  {"n": "Céleri rémoulade", "ico": "🥗", "cat": "prepare", "kcal": 128, "prot": 1.0, "gluc": 5.0, "lip": 11.5, "k": ""},
+  {"n": "Poke bowl saumon", "ico": "🥗", "cat": "prepare", "kcal": 150, "prot": 8.0, "gluc": 17.0, "lip": 5.5, "k": ""},
+  {"n": "Buddha bowl", "ico": "🥗", "cat": "prepare", "kcal": 130, "prot": 5.0, "gluc": 15.0, "lip": 5.5, "k": ""},
+  {"n": "Soupe de légumes", "ico": "🥣", "cat": "prepare", "kcal": 33, "prot": 1.0, "gluc": 5.0, "lip": 1.0, "k": ""},
+  {"n": "Velouté de potiron", "ico": "🥣", "cat": "prepare", "kcal": 46, "prot": 1.0, "gluc": 6.0, "lip": 2.0, "k": ""},
+  {"n": "Soupe à l'oignon", "ico": "🥣", "cat": "prepare", "kcal": 46, "prot": 1.5, "gluc": 5.5, "lip": 2.0, "k": ""},
+  {"n": "Soupe miso", "ico": "🥣", "cat": "prepare", "kcal": 20, "prot": 1.5, "gluc": 2.0, "lip": 0.7, "k": ""},
+  {"n": "Chorba frik", "ico": "🥣", "cat": "cuisine", "kcal": 71, "prot": 4.5, "gluc": 8.0, "lip": 2.3, "k": "algérienne chorba"},
+  {"n": "Harira", "ico": "🥣", "cat": "cuisine", "kcal": 76, "prot": 4.5, "gluc": 10.0, "lip": 2.0, "k": ""},
+  {"n": "Bourek à la viande", "ico": "🥟", "cat": "cuisine", "kcal": 258, "prot": 10.0, "gluc": 22.0, "lip": 14.5, "k": "brick brik boureks"},
+  {"n": "Brick à l'œuf", "ico": "🥟", "cat": "cuisine", "kcal": 230, "prot": 9.0, "gluc": 17.0, "lip": 14.0, "k": "brik oeuf"},
+  {"n": "Chakchouka", "ico": "🍳", "cat": "cuisine", "kcal": 85, "prot": 4.0, "gluc": 6.0, "lip": 5.0, "k": "tchoutchouka shakshuka chakchouka"},
+  {"n": "Loubia (haricots blancs en sauce)", "ico": "🍲", "cat": "cuisine", "kcal": 108, "prot": 6.5, "gluc": 15.0, "lip": 2.5, "k": ""},
+  {"n": "Mtewem", "ico": "🍲", "cat": "cuisine", "kcal": 192, "prot": 12.0, "gluc": 8.0, "lip": 12.5, "k": "mtaouem"},
+  {"n": "Dolma (légumes farcis)", "ico": "🍆", "cat": "cuisine", "kcal": 118, "prot": 7.0, "gluc": 8.0, "lip": 6.5, "k": ""},
+  {"n": "Rechta au poulet", "ico": "🍜", "cat": "cuisine", "kcal": 148, "prot": 8.0, "gluc": 19.0, "lip": 4.5, "k": ""},
+  {"n": "Tlitli", "ico": "🍝", "cat": "cuisine", "kcal": 159, "prot": 8.5, "gluc": 20.0, "lip": 5.0, "k": ""},
+  {"n": "Chakhchoukha", "ico": "🍲", "cat": "cuisine", "kcal": 182, "prot": 8.0, "gluc": 24.0, "lip": 6.0, "k": ""},
+  {"n": "Mhadjeb", "ico": "🫓", "cat": "cuisine", "kcal": 229, "prot": 5.5, "gluc": 36.0, "lip": 7.0, "k": "mahjouba mahdjouba"},
+  {"n": "Garantita", "ico": "🥧", "cat": "cuisine", "kcal": 181, "prot": 8.0, "gluc": 17.0, "lip": 9.0, "k": "karantika karantita calentica"},
+  {"n": "Msemen", "ico": "🫓", "cat": "cuisine", "kcal": 328, "prot": 7.0, "gluc": 48.0, "lip": 12.0, "k": "msemmen crêpe feuilletée"},
+  {"n": "Baghrir", "ico": "🥞", "cat": "cuisine", "kcal": 188, "prot": 5.5, "gluc": 36.0, "lip": 2.5, "k": "crêpe mille trous"},
+  {"n": "Kesra (galette de semoule)", "ico": "🫓", "cat": "cuisine", "kcal": 288, "prot": 8.0, "gluc": 55.0, "lip": 4.0, "k": "khobz"},
+  {"n": "Matlouh (pain de semoule)", "ico": "🫓", "cat": "cuisine", "kcal": 246, "prot": 8.0, "gluc": 50.0, "lip": 1.5, "k": "matlou3"},
+  {"n": "Kefta grillée", "ico": "🥩", "cat": "viande", "kcal": 234, "prot": 17.0, "gluc": 2.0, "lip": 17.5, "k": ""},
+  {"n": "Brochette d'agneau", "ico": "🍢", "cat": "viande", "kcal": 218, "prot": 22.0, "gluc": 0.0, "lip": 14.5, "k": ""},
+  {"n": "Méchoui (agneau rôti)", "ico": "🥩", "cat": "viande", "kcal": 249, "prot": 24.0, "gluc": 0.0, "lip": 17.0, "k": "mechoui"},
+  {"n": "Makrout", "ico": "🍯", "cat": "sucre", "kcal": 398, "prot": 5.0, "gluc": 62.0, "lip": 14.5, "k": "makroud"},
+  {"n": "Zlabia", "ico": "🍯", "cat": "sucre", "kcal": 377, "prot": 3.0, "gluc": 62.0, "lip": 13.0, "k": "zalabia"},
+  {"n": "Kalb el louz", "ico": "🍯", "cat": "sucre", "kcal": 361, "prot": 6.0, "gluc": 55.0, "lip": 13.0, "k": "qalb"},
+  {"n": "Baklawa", "ico": "🍯", "cat": "sucre", "kcal": 430, "prot": 7.0, "gluc": 50.0, "lip": 22.5, "k": "baklava"},
+  {"n": "Corne de gazelle", "ico": "🍪", "cat": "sucre", "kcal": 420, "prot": 8.0, "gluc": 52.0, "lip": 20.0, "k": ""},
+  {"n": "Griwech", "ico": "🍯", "cat": "sucre", "kcal": 432, "prot": 6.0, "gluc": 58.0, "lip": 19.5, "k": "chebakia"},
+  {"n": "Thé à la menthe sucré", "ico": "🍵", "cat": "boisson", "kcal": 30, "prot": 0.0, "gluc": 7.5, "lip": 0.0, "k": "the"},
+  {"n": "Leben (lait fermenté)", "ico": "🥛", "cat": "laitage", "kcal": 40, "prot": 3.2, "gluc": 4.5, "lip": 1.0, "k": "lben petit lait"},
+  {"n": "Tiramisu", "ico": "🍰", "cat": "sucre", "kcal": 285, "prot": 5.0, "gluc": 28.0, "lip": 17.0, "k": ""},
+  {"n": "Fondant au chocolat", "ico": "🍫", "cat": "sucre", "kcal": 402, "prot": 6.0, "gluc": 45.0, "lip": 22.0, "k": "moelleux"},
+  {"n": "Tarte aux pommes", "ico": "🥧", "cat": "sucre", "kcal": 240, "prot": 2.5, "gluc": 34.0, "lip": 10.5, "k": ""},
+  {"n": "Flan pâtissier", "ico": "🍮", "cat": "sucre", "kcal": 216, "prot": 5.0, "gluc": 30.0, "lip": 8.5, "k": ""},
+  {"n": "Crème brûlée", "ico": "🍮", "cat": "sucre", "kcal": 278, "prot": 4.5, "gluc": 20.0, "lip": 20.0, "k": "creme brulee"},
+  {"n": "Mousse au chocolat", "ico": "🍫", "cat": "sucre", "kcal": 280, "prot": 6.0, "gluc": 27.0, "lip": 16.5, "k": ""},
+  {"n": "Île flottante", "ico": "🍮", "cat": "sucre", "kcal": 130, "prot": 4.5, "gluc": 20.0, "lip": 3.5, "k": "ile"},
+  {"n": "Éclair au chocolat", "ico": "🍫", "cat": "sucre", "kcal": 264, "prot": 6.0, "gluc": 33.0, "lip": 12.0, "k": "eclair"},
+  {"n": "Mille-feuille", "ico": "🍰", "cat": "sucre", "kcal": 333, "prot": 5.0, "gluc": 40.0, "lip": 17.0, "k": "millefeuille"},
+  {"n": "Paris-Brest", "ico": "🍰", "cat": "sucre", "kcal": 393, "prot": 7.0, "gluc": 35.0, "lip": 25.0, "k": ""},
+  {"n": "Crêpe au sucre", "ico": "🥞", "cat": "sucre", "kcal": 239, "prot": 6.0, "gluc": 38.0, "lip": 7.0, "k": "crepe"},
+  {"n": "Crêpe au Nutella", "ico": "🥞", "cat": "sucre", "kcal": 330, "prot": 6.0, "gluc": 45.0, "lip": 14.0, "k": "crepe"},
+  {"n": "Gaufre au sucre", "ico": "🧇", "cat": "sucre", "kcal": 321, "prot": 6.0, "gluc": 45.0, "lip": 13.0, "k": ""},
+  {"n": "Beignet", "ico": "🍩", "cat": "sucre", "kcal": 380, "prot": 6.0, "gluc": 45.0, "lip": 19.5, "k": ""},
+  {"n": "Churros", "ico": "🥨", "cat": "sucre", "kcal": 387, "prot": 4.5, "gluc": 45.0, "lip": 21.0, "k": "chichi"}];
+
+// ══════════════════════════════════════════════════════════════
+// BASE ALIMENTAIRE ÉTENDUE : plats courants, recherche tolérante, produits du commerce en ligne
+// ══════════════════════════════════════════════════════════════
+(function() {
+  // Ajout des plats supplémentaires (sans doublon de nom)
+  var deja = {}, i;
+  for (i = 0; i < OH_FOODS.length; i++) deja[OH_FOODS[i].n] = 1;
+  for (i = 0; i < OH_FOODS_EXTRA.length; i++) if (!deja[OH_FOODS_EXTRA[i].n]) { OH_FOODS.push(OH_FOODS_EXTRA[i]); deja[OH_FOODS_EXTRA[i].n] = 1; }
+  OH_FOOD_CATS.push({ id: 'commerce', lbl: 'Mes produits du commerce', ico: '🛒' });
+})();
+
+function ohFoodNorm(s) {
+  s = String(s == null ? '' : s).toLowerCase().replace(/œ/g, 'oe').replace(/æ/g, 'ae');
+  try { s = s.normalize('NFD').replace(/[̀-ͯ]/g, ''); } catch(e) {}
+  return s.replace(/[^a-z0-9]+/g, ' ').trim();
+}
+var OH_FOOD_STOP = { de:1, du:1, des:1, la:1, le:1, les:1, au:1, aux:1, a:1, et:1, en:1, d:1, l:1, un:1, une:1, avec:1 };
+function ohFoodTokens(q) {
+  var raw = ohFoodNorm(q).split(' '), out = [];
+  for (var i = 0; i < raw.length; i++) {
+    var t = raw[i]; if (!t || OH_FOOD_STOP[t]) continue;
+    if (t.length > 3) t = t.replace(/[sx]$/, '');   // pluriels simples
+    out.push(t);
+  }
+  return out;
+}
+// Recherche insensible aux accents et à l'ordre des mots, avec mots-clés (ex. « sandwich grec » → kebab)
+function ohFoodSearch(query, limit) {
+  var qn = ohFoodNorm(query); if (!qn) return [];
+  var toks = ohFoodTokens(query); if (!toks.length) toks = [qn];
+  var max = limit || 30, found = [];
+  for (var i = 0; i < OH_FOODS.length; i++) {
+    var f = OH_FOODS[i];
+    if (f._nn === undefined) { f._nn = ohFoodNorm(f.n); f._h = f._nn + ' ' + ohFoodNorm(f.k || ''); }
+    var inName = true, inAll = true;
+    for (var t = 0; t < toks.length; t++) {
+      if (f._nn.indexOf(toks[t]) === -1) { inName = false; if (f._h.indexOf(toks[t]) === -1) { inAll = false; break; } }
+    }
+    if (!inAll) continue;
+    var score = f._nn.indexOf(qn) === 0 ? 0 : inName ? ((' ' + f._nn).indexOf(' ' + toks[0]) !== -1 ? 1 : 2) : 3;
+    found.push({ f: f, s: score, i: i });
+  }
+  found.sort(function(a, b){ return a.s - b.s || a.i - b.i; });
+  return found.slice(0, max).map(function(x){ return x.f; });
+}
+
+// ── Produits du commerce (Open Food Facts) ──
+var _ohOnline = { q: '', status: 'idle', names: [], last: 0 };
+var _ohOnlineMap = {};
+function ohFoodCleanName(s) { return String(s == null ? '' : s).replace(/[<>"`\\&]/g, ' ').replace(/'/g, '’').replace(/\s+/g, ' ').trim().slice(0, 70); }
+function ohFoodNum(v) { var n = parseFloat(v); return (isFinite(n) && n >= 0 && n <= 100) ? Math.round(n * 10) / 10 : 0; }
+function ohFoodFromOFF(p) {
+  if (!p || typeof p !== 'object') return null;
+  var n = ohFoodCleanName(p.product_name_fr || p.product_name); if (n.length < 2) return null;
+  var nu = p.nutriments || {}, kcal = parseFloat(nu['energy-kcal_100g']);
+  if (!isFinite(kcal)) { var kj = parseFloat(nu['energy_100g']); if (isFinite(kj)) kcal = kj / 4.184; }
+  if (!isFinite(kcal) || kcal < 0 || kcal > 950) return null;
+  var b = ohFoodCleanName(String(p.brands || '').split(',')[0]);
+  if (b && ohFoodNorm(n).indexOf(ohFoodNorm(b)) === -1) n = (n + ' — ' + b).slice(0, 80);
+  return { n: n, ico: '🛒', cat: 'commerce', kcal: Math.round(kcal), prot: ohFoodNum(nu.proteins_100g), gluc: ohFoodNum(nu.carbohydrates_100g), lip: ohFoodNum(nu.fat_100g), src: 'off' };
+}
+function ohFoodValid(f) { return f && typeof f.n === 'string' && f.n.length >= 2 && isFinite(f.kcal) && f.kcal >= 0 && f.kcal <= 950; }
+// Un produit en ligne choisi par l'utilisateur est gardé dans la base locale
+function ohFoodKeepOnline(food) {
+  if (!food || food.src !== 'off') return;
+  for (var i = 0; i < OH_FOODS.length; i++) if (OH_FOODS[i].n === food.n) return;
+  OH_FOODS.push(food);
+  try {
+    var saved = JSON.parse(localStorage.getItem('oh_foods_online') || '[]'); if (!Array.isArray(saved)) saved = [];
+    saved.unshift({ n: food.n, ico: food.ico, cat: food.cat, kcal: food.kcal, prot: food.prot, gluc: food.gluc, lip: food.lip, src: 'off' });
+    localStorage.setItem('oh_foods_online', JSON.stringify(saved.slice(0, 200)));
+  } catch(e) {}
+}
+(function ohFoodLoadOnline() {
+  try {
+    var saved = JSON.parse(localStorage.getItem('oh_foods_online') || '[]'); if (!Array.isArray(saved)) return;
+    var deja = {}, i; for (i = 0; i < OH_FOODS.length; i++) deja[OH_FOODS[i].n] = 1;
+    for (i = 0; i < saved.length && i < 200; i++) {
+      var s = saved[i]; if (!ohFoodValid(s)) continue;
+      var f = { n: ohFoodCleanName(s.n), ico: '🛒', cat: 'commerce', kcal: Math.round(s.kcal), prot: ohFoodNum(s.prot), gluc: ohFoodNum(s.gluc), lip: ohFoodNum(s.lip), src: 'off' };
+      if (f.n.length >= 2 && !deja[f.n]) { OH_FOODS.push(f); deja[f.n] = 1; }
+    }
+  } catch(e) {}
+})();
+function ohFoodOnlineUrl(q) {
+  return 'https://world.openfoodfacts.org/cgi/search.pl?search_terms=' + encodeURIComponent(q)
+    + '&search_simple=1&action=process&json=1&page_size=20&tagtype_0=countries&tag_contains_0=contains&tag_0=france'
+    + '&fields=code,product_name,product_name_fr,brands,nutriments';
+}
+function ohFoodOnlineApply(q, json) {
+  var list = (json && Array.isArray(json.products)) ? json.products : [], names = [], vus = {};
+  for (var i = 0; i < list.length; i++) {
+    var f = ohFoodFromOFF(list[i]); if (!f || vus[f.n]) continue;
+    vus[f.n] = 1; _ohOnlineMap[f.n] = f; names.push(f.n);
+  }
+  _ohOnline.status = 'done'; _ohOnline.names = names;
+}
+function ohFoodOnlineSearch() {
+  var q = String(_ohJournalSearch || '').trim(); if (q.length < 3 || _ohOnline.status === 'loading') return;
+  var now = Date.now(); if (now - _ohOnline.last < 3000 && _ohOnline.q !== q) { if (typeof ohToast === 'function') ohToast('Patiente quelques secondes'); return; }
+  _ohOnline = { q: q, status: 'loading', names: [], last: now };
+  ohJournalDoSearch(_ohJournalSearch);
+  var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+  var timer = setTimeout(function(){ if (ctrl) ctrl.abort(); }, 12000);
+  var done = function() { clearTimeout(timer); if (String(_ohJournalSearch || '').trim() === q) ohJournalDoSearch(_ohJournalSearch); };
+  try {
+    fetch(ohFoodOnlineUrl(q), ctrl ? { signal: ctrl.signal } : {})
+      .then(function(r){ if (!r.ok) throw new Error('http'); return r.json(); })
+      .then(function(j){ if (_ohOnline.q === q) ohFoodOnlineApply(q, j); })
+      .catch(function(){ if (_ohOnline.q === q) _ohOnline.status = 'error'; })
+      .then(done);
+  } catch(e) { _ohOnline.status = 'error'; done(); }
+}
+// Bloc affiché sous les résultats locaux de la recherche du journal
+function ohFoodOnlineBlock() {
+  var q = String(_ohJournalSearch || '').trim(); if (q.length < 3) return '';
+  var qh = q.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  var h = '<div style="padding:0 0.75rem 1rem">';
+  if (_ohOnline.q !== q || _ohOnline.status === 'idle') {
+    h += '<button type="button" class="of-btn" onclick="ohFoodOnlineSearch()">🛒 Chercher « ' + qh + ' » dans les produits du commerce</button>';
+  } else if (_ohOnline.status === 'loading') {
+    h += '<div class="of-note">Recherche en cours…</div>';
+  } else if (_ohOnline.status === 'error') {
+    h += '<div class="of-note">Recherche en ligne indisponible pour l\'instant. Réessaie dans une minute.</div>'
+      + '<button type="button" class="of-btn" onclick="ohFoodOnlineSearch()">Réessayer</button>';
+  } else {
+    var rows = '', n = 0;
+    for (var i = 0; i < _ohOnline.names.length; i++) { var f = _ohOnlineMap[_ohOnline.names[i]]; if (f) { rows += ohJournalFoodRow(f); n++; } }
+    h += '<div class="of-title">Produits du commerce</div>' + (n ? rows : '<div class="of-note">Aucun produit trouvé pour cette recherche.</div>')
+      + '<div class="of-note">Données : Open Food Facts</div>';
+  }
+  return h + '</div>';
+}
+
+
+// ═══════════════════════════════════════════
+//  MODULE SÉANCES (injected)
+// ═══════════════════════════════════════════
+// ═══════════════════════════════════════════
+//  MODULE SÉANCES — OmniHealth
+// ═══════════════════════════════════════════
+
+var OH_SEANCES_CATALOGUE = {
+  pectoraux: {
+    label: 'Pectoraux', icon: '💪', exos: [
+      { id: 'pectoraux-dev-couche-barre', nom: 'Développé couché barre', type: 'muscu' },
+      { id: 'pectoraux-dev-incline-barre', nom: 'Développé incliné barre', type: 'muscu' },
+      { id: 'pectoraux-dev-decline-barre', nom: 'Développé décliné barre', type: 'muscu' },
+      { id: 'pectoraux-dev-couche-halt', nom: 'Développé couché haltères', type: 'muscu' },
+      { id: 'pectoraux-dev-incline-halt', nom: 'Développé incliné haltères', type: 'muscu' },
+      { id: 'pectoraux-dev-decline-halt', nom: 'Développé décliné haltères', type: 'muscu' },
+      { id: 'pectoraux-dev-couche-guidee', nom: 'Développé couché barre guidée', type: 'muscu' },
+      { id: 'pectoraux-dev-incline-guidee', nom: 'Développé incliné barre guidée', type: 'muscu' },
+      { id: 'pectoraux-dev-assis-machine', nom: 'Développé assis machine', type: 'muscu' },
+      { id: 'pectoraux-dev-incline-machine', nom: 'Développé incliné machine', type: 'muscu' },
+      { id: 'pectoraux-pec-deck', nom: 'Pec deck (butterfly)', type: 'muscu' },
+      { id: 'pectoraux-ecarte-couche-halt', nom: 'Écarté couché haltères', type: 'muscu' },
+      { id: 'pectoraux-ecarte-incline-halt', nom: 'Écarté incliné haltères', type: 'muscu' },
+      { id: 'pectoraux-ecarte-poulies', nom: 'Écarté poulies vis-à-vis', type: 'muscu' },
+      { id: 'pectoraux-ecarte-poulies-basses', nom: 'Écarté poulies basses', type: 'muscu' },
+      { id: 'pectoraux-ecarte-poulies-hautes', nom: 'Écarté poulies hautes', type: 'muscu' },
+      { id: 'pectoraux-pompes', nom: 'Pompes', type: 'muscu' },
+      { id: 'pectoraux-pompes-inclinees', nom: 'Pompes inclinées (mains surélevées)', type: 'muscu' },
+      { id: 'pectoraux-dips-buste-penche', nom: 'Dips buste penché', type: 'muscu' },
+      { id: 'pectoraux-pull-over-halt', nom: 'Pull-over haltère', type: 'muscu' },
+      { id: 'pectoraux-dev-elastique', nom: 'Développé élastique', type: 'muscu' }
+    ]
+  },
+  epaules: {
+    label: 'Épaules', icon: '🤸', exos: [
+      { id: 'epaules-dev-militaire-barre', nom: 'Développé militaire barre', type: 'muscu' },
+      { id: 'epaules-dev-halt', nom: 'Développé épaules haltères', type: 'muscu' },
+      { id: 'epaules-dev-arnold', nom: 'Développé Arnold', type: 'muscu' },
+      { id: 'epaules-dev-machine', nom: 'Développé épaules machine', type: 'muscu' },
+      { id: 'epaules-dev-guidee', nom: 'Développé épaules barre guidée', type: 'muscu' },
+      { id: 'epaules-elev-lat-halt', nom: 'Élévations latérales haltères', type: 'muscu' },
+      { id: 'epaules-elev-lat-poulie', nom: 'Élévations latérales poulie', type: 'muscu' },
+      { id: 'epaules-elev-lat-machine', nom: 'Élévations latérales machine', type: 'muscu' },
+      { id: 'epaules-elev-front-halt', nom: 'Élévations frontales haltères', type: 'muscu' },
+      { id: 'epaules-elev-front-poulie', nom: 'Élévations frontales poulie', type: 'muscu' },
+      { id: 'epaules-elev-front-barre', nom: 'Élévations frontales barre', type: 'muscu' },
+      { id: 'epaules-oiseau-halt', nom: 'Oiseau haltères (buste penché)', type: 'muscu' },
+      { id: 'epaules-pec-deck-inv', nom: 'Pec deck inversé (deltoïde postérieur)', type: 'muscu' },
+      { id: 'epaules-face-pull', nom: 'Face pull', type: 'muscu' },
+      { id: 'epaules-oiseau-poulies', nom: 'Oiseau poulies croisées', type: 'muscu' },
+      { id: 'epaules-tirage-menton-barre', nom: 'Tirage menton barre', type: 'muscu' },
+      { id: 'epaules-tirage-menton-poulie', nom: 'Tirage menton poulie', type: 'muscu' },
+      { id: 'epaules-elev-lat-elastique', nom: 'Élévations latérales élastique', type: 'muscu' },
+      { id: 'epaules-rotation-ext-elastique', nom: 'Rotation externe élastique', type: 'muscu' },
+      { id: 'epaules-rotation-ext-poulie', nom: 'Rotation externe poulie', type: 'muscu' },
+      { id: 'epaules-dev-kettlebell', nom: 'Développé épaules kettlebell', type: 'muscu' }
+    ]
+  },
+  trapezes: {
+    label: 'Trapèzes', icon: '🏔️', exos: [
+      { id: 'trapezes-shrugs-barre', nom: 'Shrugs barre', type: 'muscu' },
+      { id: 'trapezes-shrugs-halt', nom: 'Shrugs haltères', type: 'muscu' },
+      { id: 'trapezes-shrugs-machine', nom: 'Shrugs machine', type: 'muscu' },
+      { id: 'trapezes-shrugs-guidee', nom: 'Shrugs barre guidée', type: 'muscu' },
+      { id: 'trapezes-shrugs-poulie', nom: 'Shrugs poulie basse', type: 'muscu' },
+      { id: 'trapezes-tirage-menton-large', nom: 'Tirage menton prise large', type: 'muscu' },
+      { id: 'trapezes-farmer-walk', nom: 'Farmer walk (marche du fermier)', type: 'muscu' },
+      { id: 'trapezes-rowing-barre-ecarte', nom: 'Rowing barre coudes écartés', type: 'muscu' },
+      { id: 'trapezes-shrugs-kettlebell', nom: 'Shrugs kettlebell', type: 'muscu' }
+    ]
+  },
+  biceps: {
+    label: 'Biceps', icon: '💪', exos: [
+      { id: 'biceps-curl-barre-droite', nom: 'Curl barre droite', type: 'muscu' },
+      { id: 'biceps-curl-barre-ez', nom: 'Curl barre EZ', type: 'muscu' },
+      { id: 'biceps-curl-halt', nom: 'Curl haltères', type: 'muscu' },
+      { id: 'biceps-curl-alterne-halt', nom: 'Curl alterné haltères', type: 'muscu' },
+      { id: 'biceps-curl-marteau', nom: 'Curl marteau', type: 'muscu' },
+      { id: 'biceps-curl-incline-halt', nom: 'Curl incliné haltères', type: 'muscu' },
+      { id: 'biceps-curl-concentre', nom: 'Curl concentré', type: 'muscu' },
+      { id: 'biceps-curl-pupitre-ez', nom: 'Curl pupitre barre EZ', type: 'muscu' },
+      { id: 'biceps-curl-pupitre-machine', nom: 'Curl pupitre machine', type: 'muscu' },
+      { id: 'biceps-curl-poulie-basse', nom: 'Curl poulie basse', type: 'muscu' },
+      { id: 'biceps-curl-marteau-corde', nom: 'Curl marteau corde', type: 'muscu' },
+      { id: 'biceps-curl-poulies-hautes', nom: 'Curl poulies hautes vis-à-vis', type: 'muscu' },
+      { id: 'biceps-curl-araignee', nom: 'Curl araignée (spider curl)', type: 'muscu' },
+      { id: 'biceps-tractions-supination', nom: 'Tractions supination', type: 'muscu' },
+      { id: 'biceps-curl-elastique', nom: 'Curl élastique', type: 'muscu' },
+      { id: 'biceps-curl-kettlebell', nom: 'Curl kettlebell', type: 'muscu' }
+    ]
+  },
+  triceps: {
+    label: 'Triceps', icon: '💪', exos: [
+      { id: 'triceps-ext-poulie-barre', nom: 'Extension triceps poulie haute barre', type: 'muscu' },
+      { id: 'triceps-ext-poulie-corde', nom: 'Extension triceps corde', type: 'muscu' },
+      { id: 'triceps-ext-poulie-inv', nom: 'Extension triceps prise inversée', type: 'muscu' },
+      { id: 'triceps-ext-tete-poulie', nom: 'Extension au-dessus de la tête poulie', type: 'muscu' },
+      { id: 'triceps-barre-au-front', nom: 'Barre au front', type: 'muscu' },
+      { id: 'triceps-barre-front-halt', nom: 'Barre au front haltères', type: 'muscu' },
+      { id: 'triceps-ext-nuque-halt', nom: 'Extension nuque haltère', type: 'muscu' },
+      { id: 'triceps-kickback-halt', nom: 'Kickback haltère', type: 'muscu' },
+      { id: 'triceps-dev-prise-serree', nom: 'Développé couché prise serrée', type: 'muscu' },
+      { id: 'triceps-dev-prise-serree-guidee', nom: 'Développé prise serrée barre guidée', type: 'muscu' },
+      { id: 'triceps-dips-machine', nom: 'Dips machine', type: 'muscu' },
+      { id: 'triceps-ext-machine', nom: 'Extension triceps machine', type: 'muscu' },
+      { id: 'triceps-dips', nom: 'Dips', type: 'muscu' },
+      { id: 'triceps-dips-bancs', nom: 'Dips entre deux bancs', type: 'muscu' },
+      { id: 'triceps-pompes-diamant', nom: 'Pompes prise serrée (diamant)', type: 'muscu' },
+      { id: 'triceps-ext-elastique', nom: 'Extension triceps élastique', type: 'muscu' }
+    ]
+  },
+  avantbras: {
+    label: 'Avant-bras', icon: '🦾', exos: [
+      { id: 'avantbras-curl-poignets-barre', nom: 'Curl poignets barre', type: 'muscu' },
+      { id: 'avantbras-curl-poignets-halt', nom: 'Curl poignets haltères', type: 'muscu' },
+      { id: 'avantbras-ext-poignets-barre', nom: 'Extension poignets barre', type: 'muscu' },
+      { id: 'avantbras-ext-poignets-halt', nom: 'Extension poignets haltères', type: 'muscu' },
+      { id: 'avantbras-curl-inv-barre', nom: 'Curl inversé barre', type: 'muscu' },
+      { id: 'avantbras-curl-inv-poulie', nom: 'Curl inversé poulie', type: 'muscu' },
+      { id: 'avantbras-pronation-supination', nom: 'Pronation-supination haltère', type: 'muscu' },
+      { id: 'avantbras-suspension-barre', nom: 'Suspension à la barre', type: 'muscu' },
+      { id: 'avantbras-pince-disques', nom: 'Pince (tenue de disques)', type: 'muscu' }
+    ]
+  },
+  dorsaux: {
+    label: 'Dos', icon: '🏋️', exos: [
+      { id: 'dorsaux-tractions-pronation', nom: 'Tractions pronation', type: 'muscu' },
+      { id: 'dorsaux-tractions-neutre', nom: 'Tractions prise neutre', type: 'muscu' },
+      { id: 'dorsaux-tractions-assistees', nom: 'Tractions assistées machine', type: 'muscu' },
+      { id: 'dorsaux-tirage-vert-large', nom: 'Tirage vertical prise large', type: 'muscu' },
+      { id: 'dorsaux-tirage-vert-serre', nom: 'Tirage vertical prise serrée', type: 'muscu' },
+      { id: 'dorsaux-tirage-vert-neutre', nom: 'Tirage vertical prise neutre', type: 'muscu' },
+      { id: 'dorsaux-tirage-vert-nuque', nom: 'Tirage vertical nuque', type: 'muscu' },
+      { id: 'dorsaux-tirage-horiz-bas', nom: 'Tirage horizontal poulie basse', type: 'muscu' },
+      { id: 'dorsaux-tirage-horiz-large', nom: 'Tirage horizontal prise large', type: 'muscu' },
+      { id: 'dorsaux-rowing-barre', nom: 'Rowing barre buste penché', type: 'muscu' },
+      { id: 'dorsaux-rowing-barre-sup', nom: 'Rowing barre supination', type: 'muscu' },
+      { id: 'dorsaux-rowing-tbar', nom: 'Rowing T-bar', type: 'muscu' },
+      { id: 'dorsaux-rowing-halt-unilateral', nom: 'Rowing haltère un bras', type: 'muscu' },
+      { id: 'dorsaux-rowing-halt-penche', nom: 'Rowing haltères buste penché', type: 'muscu' },
+      { id: 'dorsaux-rowing-assis-machine', nom: 'Rowing assis machine', type: 'muscu' },
+      { id: 'dorsaux-tirage-vert-machine', nom: 'Tirage vertical machine', type: 'muscu' },
+      { id: 'dorsaux-rowing-guidee', nom: 'Rowing barre guidée', type: 'muscu' },
+      { id: 'dorsaux-pull-over-poulie', nom: 'Pull-over poulie haute bras tendus', type: 'muscu' },
+      { id: 'dorsaux-tirage-unilat', nom: 'Tirage un bras poulie', type: 'muscu' },
+      { id: 'dorsaux-rowing-inverse', nom: 'Rowing inversé (barre basse)', type: 'muscu' },
+      { id: 'dorsaux-tirage-elastique', nom: 'Tirage élastique', type: 'muscu' },
+      { id: 'dorsaux-rowing-kettlebell', nom: 'Rowing kettlebell', type: 'muscu' }
+    ]
+  },
+  lombaires: {
+    label: 'Lombaires', icon: '🔙', exos: [
+      { id: 'lombaires-ext-banc', nom: 'Extension au banc à lombaires', type: 'muscu' },
+      { id: 'lombaires-ext-machine', nom: 'Extension lombaires machine', type: 'muscu' },
+      { id: 'lombaires-souleve-de-terre', nom: 'Soulevé de terre', type: 'muscu' },
+      { id: 'lombaires-good-morning', nom: 'Good morning barre', type: 'muscu' },
+      { id: 'lombaires-souleve-jambes-tendues', nom: 'Soulevé de terre jambes tendues', type: 'muscu' },
+      { id: 'lombaires-superman', nom: 'Superman au sol', type: 'muscu' },
+      { id: 'lombaires-bird-dog', nom: 'Bird-dog', type: 'muscu' },
+      { id: 'lombaires-tirage-poulie-jambes', nom: 'Tirage poulie entre les jambes', type: 'muscu' },
+      { id: 'lombaires-ext-banc-charge', nom: 'Extension au banc avec charge', type: 'muscu' },
+      { id: 'lombaires-souleve-kettlebell', nom: 'Soulevé de terre kettlebell', type: 'muscu' }
+    ]
+  },
+  abdos: {
+    label: 'Abdos', icon: '🔥', exos: [
+      { id: 'abdos-crunch-sol', nom: 'Crunch au sol', type: 'muscu' },
+      { id: 'abdos-crunch-machine', nom: 'Crunch machine', type: 'muscu' },
+      { id: 'abdos-crunch-poulie', nom: 'Crunch poulie haute', type: 'muscu' },
+      { id: 'abdos-releve-jambes-suspendu', nom: 'Relevé de jambes suspendu', type: 'muscu' },
+      { id: 'abdos-releve-genoux-chaise', nom: 'Relevé de genoux chaise romaine', type: 'muscu' },
+      { id: 'abdos-releve-jambes-sol', nom: 'Relevé de jambes au sol', type: 'muscu' },
+      { id: 'abdos-gainage-planche', nom: 'Gainage planche', type: 'muscu' },
+      { id: 'abdos-gainage-lateral', nom: 'Gainage latéral', type: 'muscu' },
+      { id: 'abdos-russian-twist', nom: 'Russian twist', type: 'muscu' },
+      { id: 'abdos-russian-twist-charge', nom: 'Russian twist avec charge', type: 'muscu' },
+      { id: 'abdos-mountain-climbers', nom: 'Mountain climbers', type: 'muscu' },
+      { id: 'abdos-roulette', nom: 'Roulette abdominale', type: 'muscu' },
+      { id: 'abdos-rotation-machine', nom: 'Rotation du buste machine', type: 'muscu' },
+      { id: 'abdos-rotation-poulie', nom: 'Rotation du buste poulie (woodchopper)', type: 'muscu' },
+      { id: 'abdos-crunch-oblique', nom: 'Crunch oblique', type: 'muscu' },
+      { id: 'abdos-crunch-inverse', nom: 'Crunch inversé', type: 'muscu' },
+      { id: 'abdos-sit-up', nom: 'Sit-up', type: 'muscu' },
+      { id: 'abdos-flexion-lat-halt', nom: 'Flexion latérale haltère', type: 'muscu' },
+      { id: 'abdos-dead-bug', nom: 'Dead bug', type: 'muscu' },
+      { id: 'abdos-pallof-press', nom: 'Pallof press élastique', type: 'muscu' }
+    ]
+  },
+  jambes: {
+    label: 'Jambes', icon: '🦵', exos: [
+      { id: 'jambes-squat-barre', nom: 'Squat barre', type: 'muscu' },
+      { id: 'jambes-squat-avant', nom: 'Squat avant (front squat)', type: 'muscu' },
+      { id: 'jambes-squat-guidee', nom: 'Squat barre guidée', type: 'muscu' },
+      { id: 'jambes-squat-gobelet', nom: 'Squat gobelet', type: 'muscu' },
+      { id: 'jambes-hack-squat', nom: 'Hack squat', type: 'muscu' },
+      { id: 'jambes-presse-cuisses', nom: 'Presse à cuisses', type: 'muscu' },
+      { id: 'jambes-presse-cuisses-unilat', nom: 'Presse à cuisses une jambe', type: 'muscu' },
+      { id: 'jambes-leg-extension', nom: 'Extension de jambes (leg extension)', type: 'muscu' },
+      { id: 'jambes-leg-curl-allonge', nom: 'Flexion de jambes allongé (leg curl)', type: 'muscu' },
+      { id: 'jambes-leg-curl-assis', nom: 'Flexion de jambes assis', type: 'muscu' },
+      { id: 'jambes-fentes-halt', nom: 'Fentes haltères', type: 'muscu' },
+      { id: 'jambes-fentes-barre', nom: 'Fentes barre', type: 'muscu' },
+      { id: 'jambes-fentes-marchees', nom: 'Fentes marchées', type: 'muscu' },
+      { id: 'jambes-fentes-bulgares', nom: 'Fentes bulgares', type: 'muscu' },
+      { id: 'jambes-fentes-guidee', nom: 'Fentes barre guidée', type: 'muscu' },
+      { id: 'jambes-sdr-roumain', nom: 'Soulevé de terre roumain', type: 'muscu' },
+      { id: 'jambes-sdr-roumain-halt', nom: 'Soulevé de terre roumain haltères', type: 'muscu' },
+      { id: 'jambes-adducteurs-machine', nom: 'Adducteurs machine', type: 'muscu' },
+      { id: 'jambes-abducteurs-machine', nom: 'Abducteurs machine', type: 'muscu' },
+      { id: 'jambes-step-up', nom: 'Montée sur banc (step-up)', type: 'muscu' },
+      { id: 'jambes-squat-corps', nom: 'Squat poids du corps', type: 'muscu' },
+      { id: 'jambes-chaise-mur', nom: 'Chaise contre le mur', type: 'muscu' },
+      { id: 'jambes-squat-kettlebell', nom: 'Squat kettlebell', type: 'muscu' },
+      { id: 'jambes-squat-elastique', nom: 'Squat élastique', type: 'muscu' }
+    ]
+  },
+  fessiers: {
+    label: 'Fessiers', icon: '🍑', exos: [
+      { id: 'fessiers-hip-thrust-barre', nom: 'Hip thrust barre', type: 'muscu' },
+      { id: 'fessiers-hip-thrust-machine', nom: 'Hip thrust machine', type: 'muscu' },
+      { id: 'fessiers-hip-thrust-halt', nom: 'Hip thrust haltère', type: 'muscu' },
+      { id: 'fessiers-pont-fessier', nom: 'Pont fessier au sol', type: 'muscu' },
+      { id: 'fessiers-kickback-poulie', nom: 'Kickback fessier poulie', type: 'muscu' },
+      { id: 'fessiers-kickback-machine', nom: 'Kickback fessier machine', type: 'muscu' },
+      { id: 'fessiers-abduction-poulie', nom: 'Abduction hanche poulie', type: 'muscu' },
+      { id: 'fessiers-sdr-sumo', nom: 'Soulevé de terre sumo', type: 'muscu' },
+      { id: 'fessiers-swing-kettlebell', nom: 'Swing kettlebell', type: 'muscu' },
+      { id: 'fessiers-marche-lat-elastique', nom: 'Marche latérale élastique', type: 'muscu' },
+      { id: 'fessiers-abduction-assise-elastique', nom: 'Abduction assise élastique', type: 'muscu' }
+    ]
+  },
+  mollets: {
+    label: 'Mollets', icon: '🦿', exos: [
+      { id: 'mollets-debout-machine', nom: 'Mollets debout machine', type: 'muscu' },
+      { id: 'mollets-assis-machine', nom: 'Mollets assis machine', type: 'muscu' },
+      { id: 'mollets-presse', nom: 'Mollets à la presse', type: 'muscu' },
+      { id: 'mollets-debout-guidee', nom: 'Mollets debout barre guidée', type: 'muscu' },
+      { id: 'mollets-debout-halt', nom: 'Mollets debout haltères', type: 'muscu' },
+      { id: 'mollets-unilat-halt', nom: 'Mollets une jambe haltère', type: 'muscu' },
+      { id: 'mollets-debout-barre', nom: 'Mollets debout barre', type: 'muscu' },
+      { id: 'mollets-corps', nom: 'Mollets debout poids du corps', type: 'muscu' },
+      { id: 'mollets-tibial', nom: 'Tibial antérieur machine', type: 'muscu' }
+    ]
+  },
+  cardio: {
+    label: 'Cardio', icon: '❤️', exos: [
+      { id: 'cardio-course', nom: 'Course à pied', type: 'cardio' },
+      { id: 'cardio-velo', nom: 'Vélo / Spinning', type: 'cardio' },
+      { id: 'cardio-rameur', nom: 'Rameur', type: 'cardio' },
+      { id: 'cardio-elliptique', nom: 'Elliptique', type: 'cardio' },
+      { id: 'cardio-natation', nom: 'Natation', type: 'cardio' },
+      { id: 'cardio-corde-sauter', nom: 'Corde à sauter', type: 'cardio' },
+      { id: 'cardio-stepper', nom: 'Stepper', type: 'cardio' },
+      { id: 'cardio-ski-erg', nom: 'Ski Erg', type: 'cardio' },
+      { id: 'cardio-assault-bike', nom: 'Assault Bike', type: 'cardio' },
+      { id: 'cardio-marche-rapide', nom: 'Marche rapide', type: 'cardio' }
+    ]
+  }
+};
+
+
+// ── State ──
+var _ohSeancesZoneActive = null;
+var _ohSeancesExoActif   = null;
+var _ohSeancesVue        = 'accueil';
+var _ohSeanceEnCours     = null;
+var _ohSeancesRPE        = null;
+
+// ── Storage ──
+var OH_SEANCES_LS = 'oh_seances_data';
+
+function ohSeancesGetData() {
+  try {
+    var raw = localStorage.getItem(OH_SEANCES_LS);
+    if (!raw) return { seances: [], exos_perso: [] };
+    var d = JSON.parse(raw);
+    if (!d.seances) d.seances = [];
+    if (!d.exos_perso) d.exos_perso = [];
+    return d;
+  } catch(e) { return { seances: [], exos_perso: [] }; }
+}
+
+function ohSeancesSaveData(d) {
+  try { localStorage.setItem(OH_SEANCES_LS, JSON.stringify(d)); } catch(e) {}
+}
+
+function ohSeancesOuvrirOuCreer() {
+  var today = new Date().toISOString().slice(0,10);
+  var d = ohSeancesGetData();
+  for (var i = 0; i < d.seances.length; i++) {
+    if (d.seances[i].date === today && !d.seances[i].cloturee) {
+      _ohSeanceEnCours = d.seances[i]; return;
+    }
+  }
+  var s = { id: 'se_' + Date.now(), date: today, series: [], cloturee: false };
+  d.seances.push(s);
+  ohSeancesSaveData(d);
+  _ohSeanceEnCours = s;
+}
+
+function ohSeancesAjouterSerie(exoId, exoNom, zoneId, charge, reps, effort, typeCardio, dureeMin, distKm) {
+  if (!_ohSeanceEnCours) return;
+  var serie = {
+    id: 'sr_' + Date.now() + '_' + Math.floor(Math.random()*10000),
+    exoId: exoId, exoNom: exoNom, zone: zoneId,
+    typeCardio: typeCardio ? true : false,
+    ts: Date.now()
+  };
+  if (typeCardio) {
+    serie.dureeMin = dureeMin  ? parseFloat(dureeMin)  : null;
+    serie.distKm   = distKm    ? parseFloat(distKm)    : null;
+  } else {
+    var c = parseFloat(charge);
+    serie.charge = (charge !== '' && charge !== null && charge !== undefined && !isNaN(c)) ? c : null;
+    serie.reps   = reps ? parseInt(reps, 10) : null;
+  }
+  serie.effort = (effort !== null && effort !== undefined && effort !== '') ? parseInt(effort, 10) : null;
+  _ohSeanceEnCours.series.push(serie);
+  var d = ohSeancesGetData();
+  for (var i = 0; i < d.seances.length; i++) {
+    if (d.seances[i].id === _ohSeanceEnCours.id) { d.seances[i] = _ohSeanceEnCours; break; }
+  }
+  ohSeancesSaveData(d);
+}
+
+function ohSeancesCloturer() {
+  if (!_ohSeanceEnCours) return;
+  _ohSeanceEnCours.cloturee = true;
+  var d = ohSeancesGetData();
+  for (var i = 0; i < d.seances.length; i++) {
+    if (d.seances[i].id === _ohSeanceEnCours.id) { d.seances[i] = _ohSeanceEnCours; break; }
+  }
+  ohSeancesSaveData(d);
+  _ohSeanceEnCours = null;
+}
+
+function ohSeancesSupprimerSerie(serieId) {
+  if (!_ohSeanceEnCours) return;
+  _ohSeanceEnCours.series = _ohSeanceEnCours.series.filter(function(s){ return s.id !== serieId; });
+  var d = ohSeancesGetData();
+  for (var i = 0; i < d.seances.length; i++) {
+    if (d.seances[i].id === _ohSeanceEnCours.id) { d.seances[i] = _ohSeanceEnCours; break; }
+  }
+  ohSeancesSaveData(d);
+}
+
+function ohSeancesAjouterExoPerso(nom, zoneId, description) {
+  nom = String(nom || '').trim();
+  if (!nom) return null;
+  var exo = {
+    id: 'perso_' + Date.now() + '_' + Math.floor(Math.random()*9999),
+    nom: nom, zone: zoneId || 'mes_exos',
+    description: String(description || '').trim(), perso: true
+  };
+  var d = ohSeancesGetData();
+  d.exos_perso.push(exo);
+  ohSeancesSaveData(d);
+  return exo;
+}
+
+function ohSeancesGetExosPersoParZone(zoneId) {
+  var d = ohSeancesGetData();
+  if (!d.exos_perso) return [];
+  return d.exos_perso.filter(function(e) {
+    if (zoneId === 'mes_exos') return e.zone === 'mes_exos';
+    return e.zone === zoneId || e.zone === 'mes_exos';
+  });
+}
+
+function ohEsc(str) {
+  if (str === null || str === undefined) return '';
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function ohEscAttr(str) {
+  if (!str) return '';
+  return String(str).replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+}
+
+function ohSeancesRender() {
+  var c = document.getElementById('seances-content');
+  if (!c) return;
+  if (_ohSeancesVue === 'zones')      return ohSeancesAfficherZones();
+  if (_ohSeancesVue === 'exos')       return ohSeancesAfficherExos(_ohSeancesZoneActive);
+  if (_ohSeancesVue === 'saisie')     return ohSeancesAfficherSaisie(_ohSeancesExoActif.id, _ohSeancesExoActif.nom, _ohSeancesZoneActive);
+  if (_ohSeancesVue === 'historique') return ohSeancesAfficherHistorique();
+  if (_ohSeancesVue === 'exo_perso')  return ohSeancesAfficherFormExoPerso(_ohSeancesZoneActive);
+
+  ohSeancesOuvrirOuCreer();
+  var s = _ohSeanceEnCours;
+  var nbSeries = s ? s.series.length : 0;
+
+  var h = '<div style="padding:1rem">';
+  h += '<h2 style="font-size:1.2rem;font-weight:800;margin:0 0 0.4rem">📋 Séances</h2>';
+  h += '<p style="color:var(--muted);font-size:0.85rem;margin:0 0 1.2rem">Catalogue complet · Cardio · Exos personnalisés</p>';
+
+  h += '<div style="background:var(--card);border-radius:12px;padding:1rem;margin-bottom:1rem">';
+  h += '<div style="font-weight:700;font-size:0.95rem;margin-bottom:0.3rem">Séance du jour</div>';
+  if (nbSeries === 0) {
+    h += '<div style="color:var(--muted);font-size:0.85rem">Aucune série enregistrée</div>';
+  } else {
+    var byZone = {};
+    for (var i = 0; i < s.series.length; i++) {
+      var z = s.series[i].zone;
+      byZone[z] = (byZone[z] || 0) + 1;
+    }
+    var parts = [];
+    Object.keys(byZone).forEach(function(z) {
+      var lab = OH_SEANCES_CATALOGUE[z] ? OH_SEANCES_CATALOGUE[z].label : z;
+      parts.push(byZone[z] + ' série' + (byZone[z] > 1 ? 's' : '') + ' ' + lab);
+    });
+    h += '<div style="font-size:0.9rem;color:var(--text)">' + parts.join(' · ') + '</div>';
+  }
+  h += '</div>';
+
+  h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:0.6rem;margin-bottom:1rem">';
+  h += '<button class="sp-btn" onclick="_ohSeancesVue=\'zones\';ohSeancesRender()" type="button" style="font-size:0.9rem;padding:0.75rem">➕ Ajouter une série</button>';
+  h += '<button class="sp-btn sp-btn-sec" onclick="_ohSeancesVue=\'historique\';ohSeancesRender()" type="button" style="font-size:0.9rem;padding:0.75rem">📅 Historique</button>';
+  h += '</div>';
+
+  if (nbSeries > 0) {
+    h += '<div style="background:var(--card);border-radius:12px;padding:0.75rem;margin-bottom:0.8rem">';
+    h += '<div style="font-weight:700;font-size:0.85rem;margin-bottom:0.5rem">En cours</div>';
+    for (var j = 0; j < s.series.length; j++) {
+      var sr = s.series[j];
+      var details = '';
+      if (sr.typeCardio) {
+        if (sr.dureeMin) details += sr.dureeMin + ' min';
+        if (sr.distKm)   details += ' · ' + sr.distKm + ' km';
+      } else {
+        if (sr.charge)   details += sr.charge + ' kg';
+        if (sr.reps)     details += (details ? ' × ' : '') + sr.reps + ' reps';
+      }
+      if (sr.effort)     details += ' · RPE ' + sr.effort;
+      h += '<div style="display:flex;justify-content:space-between;align-items:center;padding:0.3rem 0;border-bottom:1px solid var(--border)">';
+      h += '<div><span style="font-weight:600;font-size:0.85rem">' + ohEsc(sr.exoNom) + '</span>';
+      if (details) h += '<span style="font-size:0.78rem;color:var(--muted);margin-left:0.4rem">' + ohEsc(details) + '</span>';
+      h += '</div>';
+      h += '<button onclick="ohSeancesSupprimerSerie(\'' + ohEscAttr(sr.id) + '\');ohSeancesRender()" type="button" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:1rem;padding:0.2rem 0.4rem" aria-label="Supprimer">✕</button>';
+      h += '</div>';
+    }
+    h += '</div>';
+    h += '<button onclick="ohSeancesConfirmerCloturer()" type="button" style="width:100%;background:none;border:1px solid var(--muted);color:var(--muted);border-radius:8px;padding:0.5rem;font-size:0.82rem;cursor:pointer">Clôturer la séance</button>';
+  }
+  h += '</div>';
+  c.innerHTML = h;
+}
+
+function ohSeancesAfficherZones() {
+  var c = document.getElementById('seances-content');
+  if (!c) return;
+  var h = '<div style="padding:1rem">';
+  h += '<div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:1rem">';
+  h += '<button onclick="_ohSeancesVue=\'accueil\';ohSeancesRender()" type="button" style="background:none;border:none;cursor:pointer;font-size:1.3rem;padding:0" aria-label="Retour">‹</button>';
+  h += '<h2 style="font-size:1.1rem;font-weight:800;margin:0">Choisir une zone</h2>';
+  h += '</div>';
+  h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:0.6rem">';
+  var zones = Object.keys(OH_SEANCES_CATALOGUE);
+  for (var i = 0; i < zones.length; i++) {
+    var z = OH_SEANCES_CATALOGUE[zones[i]];
+    h += '<button onclick="_ohSeancesZoneActive=\'' + zones[i] + '\';_ohSeancesVue=\'exos\';ohSeancesRender()" type="button" ';
+    h += 'style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:1rem 0.5rem;cursor:pointer;text-align:center">';
+    h += '<div style="font-size:1.6rem;margin-bottom:0.3rem">' + z.icon + '</div>';
+    h += '<div style="font-size:0.85rem;font-weight:700;color:var(--text)">' + ohEsc(z.label) + '</div>';
+    h += '</button>';
+  }
+  h += '<button onclick="_ohSeancesZoneActive=\'mes_exos\';_ohSeancesVue=\'exos\';ohSeancesRender()" type="button" ';
+  h += 'style="background:var(--card);border:1px dashed var(--accent);border-radius:12px;padding:1rem 0.5rem;cursor:pointer;text-align:center">';
+  h += '<div style="font-size:1.6rem;margin-bottom:0.3rem">⭐</div>';
+  h += '<div style="font-size:0.85rem;font-weight:700;color:var(--accent)">Mes exos</div>';
+  h += '</button>';
+  h += '</div></div>';
+  c.innerHTML = h;
+}
+
+function ohSeancesAfficherExos(zoneId) {
+  var c = document.getElementById('seances-content');
+  if (!c) return;
+  var isMesExos = (zoneId === 'mes_exos');
+  var zone = isMesExos ? null : OH_SEANCES_CATALOGUE[zoneId];
+  var label = isMesExos ? 'Mes exercices' : (zone ? zone.label : zoneId);
+  var exosCatalogue = isMesExos ? [] : (zone ? zone.exos : []);
+  var exosPerso = ohSeancesGetExosPersoParZone(zoneId);
+
+  var h = '<div style="padding:1rem">';
+  h += '<div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:1rem">';
+  h += '<button onclick="_ohSeancesVue=\'zones\';ohSeancesRender()" type="button" style="background:none;border:none;cursor:pointer;font-size:1.3rem;padding:0" aria-label="Retour">‹</button>';
+  h += '<h2 style="font-size:1.1rem;font-weight:800;margin:0">' + ohEsc(label) + '</h2>';
+  h += '</div>';
+
+  if (exosCatalogue.length > 0) {
+    h += '<div style="margin-bottom:0.5rem">';
+    for (var i = 0; i < exosCatalogue.length; i++) {
+      var e = exosCatalogue[i];
+      h += '<button onclick="_ohSeancesExoActif={id:\'' + ohEscAttr(e.id) + '\',nom:\'' + ohEscAttr(e.nom) + '\'};_ohSeancesVue=\'saisie\';ohSeancesRender()" type="button" ';
+      h += 'style="display:block;width:100%;text-align:left;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:0.65rem 0.8rem;margin-bottom:0.4rem;cursor:pointer">';
+      h += '<span style="font-size:0.9rem;font-weight:600;color:var(--text)">' + ohEsc(e.nom) + '</span>';
+      h += '</button>';
+    }
+    h += '</div>';
+  }
+
+  if (exosPerso.length > 0) {
+    if (!isMesExos && exosCatalogue.length > 0) {
+      h += '<div style="font-size:0.78rem;color:var(--muted);font-weight:700;text-transform:uppercase;margin:0.8rem 0 0.4rem">Mes exercices</div>';
+    }
+    for (var j = 0; j < exosPerso.length; j++) {
+      var ep = exosPerso[j];
+      h += '<button onclick="_ohSeancesExoActif={id:\'' + ohEscAttr(ep.id) + '\',nom:\'' + ohEscAttr(ep.nom) + '\'};_ohSeancesVue=\'saisie\';ohSeancesRender()" type="button" ';
+      h += 'style="display:block;width:100%;text-align:left;background:var(--card);border:1px solid var(--accent);border-radius:8px;padding:0.65rem 0.8rem;margin-bottom:0.4rem;cursor:pointer">';
+      h += '<span style="font-size:0.9rem;font-weight:600;color:var(--accent)">⭐ ' + ohEsc(ep.nom) + '</span>';
+      if (ep.description) h += '<span style="font-size:0.78rem;color:var(--muted);margin-left:0.4rem">' + ohEsc(ep.description) + '</span>';
+      h += '</button>';
+    }
+  }
+
+  if (!isMesExos && exosCatalogue.length === 0 && exosPerso.length === 0) {
+    h += '<p style="color:var(--muted);font-size:0.85rem">Aucun exercice dans cette zone.</p>';
+  }
+  if (isMesExos && exosPerso.length === 0) {
+    h += '<p style="color:var(--muted);font-size:0.85rem">Vous n\'avez pas encore ajouté d\'exercice personnalisé.</p>';
+  }
+
+  h += '<button onclick="_ohSeancesVue=\'exo_perso\';ohSeancesRender()" type="button" ';
+  h += 'style="display:block;width:100%;background:none;border:1px dashed var(--accent);color:var(--accent);border-radius:8px;padding:0.65rem;margin-top:0.8rem;cursor:pointer;font-size:0.88rem;font-weight:600">+ Ajouter un exercice personnalisé</button>';
+  h += '</div>';
+  c.innerHTML = h;
+}
+
+function ohSeancesAfficherFormExoPerso(zoneId) {
+  var c = document.getElementById('seances-content');
+  if (!c) return;
+  var h = '<div style="padding:1rem">';
+  h += '<div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:1rem">';
+  h += '<button onclick="_ohSeancesVue=\'exos\';ohSeancesRender()" type="button" style="background:none;border:none;cursor:pointer;font-size:1.3rem;padding:0">‹</button>';
+  h += '<h2 style="font-size:1.1rem;font-weight:800;margin:0">Nouvel exercice</h2>';
+  h += '</div>';
+  h += '<div style="margin-bottom:1rem"><label style="font-size:0.85rem;font-weight:600;display:block;margin-bottom:0.3rem">Nom de l\'exercice *</label>';
+  h += '<input id="seances-exo-nom" type="text" placeholder="Ex : Tirage nuque fauteuil" style="width:100%;box-sizing:border-box;padding:0.65rem;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--text);font-size:0.9rem"></div>';
+  h += '<div style="margin-bottom:1rem"><label style="font-size:0.85rem;font-weight:600;display:block;margin-bottom:0.3rem">Zone musculaire</label>';
+  h += '<select id="seances-exo-zone" style="width:100%;padding:0.65rem;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--text);font-size:0.9rem">';
+  var zones = Object.keys(OH_SEANCES_CATALOGUE);
+  for (var i = 0; i < zones.length; i++) {
+    var selected = (zones[i] === zoneId) ? ' selected' : '';
+    h += '<option value="' + zones[i] + '"' + selected + '>' + ohEsc(OH_SEANCES_CATALOGUE[zones[i]].label) + '</option>';
+  }
+  h += '<option value="mes_exos"' + (zoneId === 'mes_exos' ? ' selected' : '') + '>⭐ Section Mes exercices uniquement</option>';
+  h += '</select></div>';
+  h += '<div style="margin-bottom:1.2rem"><label style="font-size:0.85rem;font-weight:600;display:block;margin-bottom:0.3rem">Description / équipement (optionnel)</label>';
+  h += '<input id="seances-exo-desc" type="text" placeholder="Ex : Machine adaptée PMR, position haute" style="width:100%;box-sizing:border-box;padding:0.65rem;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--text);font-size:0.9rem"></div>';
+  h += '<button onclick="ohSeancesSauvegarderExoPerso(true)" type="button" class="sp-btn" style="width:100%">Enregistrer</button>';
+  h += '</div>';
+  c.innerHTML = h;
+}
+
+function ohSeancesSauvegarderExoPerso(retourZone) {
+  var nom  = (document.getElementById('seances-exo-nom')  || {value:''}).value;
+  var zone = (document.getElementById('seances-exo-zone') || {value:'mes_exos'}).value;
+  var desc = (document.getElementById('seances-exo-desc') || {value:''}).value;
+  if (!nom.trim()) { if (typeof ohToast === 'function') ohToast('Le nom est obligatoire'); return; }
+  ohSeancesAjouterExoPerso(nom, zone, desc);
+  _ohSeancesZoneActive = zone;
+  _ohSeancesVue = retourZone ? 'exos' : 'accueil';
+  ohSeancesRender();
+}
+
+function ohSeancesAfficherSaisie(exoId, exoNom, zoneId) {
+  var c = document.getElementById('seances-content');
+  if (!c) return;
+  var isCardio = (zoneId === 'cardio');
+  var lastCharge = '', lastReps = '';
+  if (!isCardio && _ohSeanceEnCours) {
+    var series = _ohSeanceEnCours.series;
+    for (var i = series.length - 1; i >= 0; i--) {
+      if (series[i].exoId === exoId && !series[i].typeCardio) {
+        lastCharge = series[i].charge !== null ? String(series[i].charge) : '';
+        lastReps   = series[i].reps   !== null ? String(series[i].reps)   : '';
+        break;
+      }
+    }
+  }
+  _ohSeancesRPE = null;
+
+  var zoneLabel = zoneId === 'mes_exos' ? 'Mes exercices' : (OH_SEANCES_CATALOGUE[zoneId] ? OH_SEANCES_CATALOGUE[zoneId].label : zoneId);
+  var h = '<div style="padding:1rem">';
+  h += '<div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.3rem">';
+  h += '<button onclick="_ohSeancesVue=\'exos\';ohSeancesRender()" type="button" style="background:none;border:none;cursor:pointer;font-size:1.3rem;padding:0">‹</button>';
+  h += '<h2 style="font-size:1.1rem;font-weight:800;margin:0">' + ohEsc(exoNom) + '</h2>';
+  h += '</div>';
+  h += '<p style="color:var(--muted);font-size:0.8rem;margin:0 0 1rem">' + ohEsc(zoneLabel) + '</p>';
+
+  if (!isCardio) {
+    h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:0.6rem;margin-bottom:1rem">';
+    h += '<div><label style="font-size:0.82rem;font-weight:600;display:block;margin-bottom:0.25rem">Charge (kg)</label>';
+    h += '<input id="saisie-charge" type="number" min="0" step="0.5" value="' + ohEsc(lastCharge) + '" placeholder="—" style="width:100%;box-sizing:border-box;padding:0.65rem;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--text);font-size:1rem;text-align:center"></div>';
+    h += '<div><label style="font-size:0.82rem;font-weight:600;display:block;margin-bottom:0.25rem">Répétitions</label>';
+    h += '<input id="saisie-reps" type="number" min="1" step="1" value="' + ohEsc(lastReps) + '" placeholder="—" style="width:100%;box-sizing:border-box;padding:0.65rem;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--text);font-size:1rem;text-align:center"></div>';
+    h += '</div>';
+  } else {
+    h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:0.6rem;margin-bottom:1rem">';
+    h += '<div><label style="font-size:0.82rem;font-weight:600;display:block;margin-bottom:0.25rem">Durée (min)</label>';
+    h += '<input id="saisie-duree" type="number" min="1" step="1" placeholder="—" style="width:100%;box-sizing:border-box;padding:0.65rem;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--text);font-size:1rem;text-align:center"></div>';
+    h += '<div><label style="font-size:0.82rem;font-weight:600;display:block;margin-bottom:0.25rem">Distance (km)</label>';
+    h += '<input id="saisie-dist" type="number" min="0" step="0.1" placeholder="—" style="width:100%;box-sizing:border-box;padding:0.65rem;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--text);font-size:1rem;text-align:center"></div>';
+    h += '</div>';
+  }
+
+  h += '<div style="margin-bottom:1.2rem"><label style="font-size:0.82rem;font-weight:600;display:block;margin-bottom:0.5rem">Effort perçu (RPE) — optionnel</label>';
+  h += '<div id="saisie-rpe-row" style="display:flex;gap:0.3rem;flex-wrap:wrap">';
+  for (var n = 1; n <= 10; n++) {
+    h += '<button id="rpe-btn-' + n + '" onclick="ohSeancesSetRPE(' + n + ')" type="button" ';
+    h += 'style="flex:0 0 auto;width:2.4rem;height:2.4rem;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--text);cursor:pointer;font-size:0.85rem;font-weight:700">' + n + '</button>';
+  }
+  h += '</div></div>';
+  h += '<button onclick="ohSeancesValiderSerie()" type="button" class="sp-btn" style="width:100%;font-size:1rem;padding:0.8rem">Valider la série</button>';
+  h += '</div>';
+  c.innerHTML = h;
+}
+
+function ohSeancesSetRPE(val) {
+  _ohSeancesRPE = val;
+  for (var n = 1; n <= 10; n++) {
+    var btn = document.getElementById('rpe-btn-' + n);
+    if (!btn) continue;
+    if (n === val) { btn.style.background='var(--accent)';btn.style.color='#fff';btn.style.borderColor='var(--accent)'; }
+    else { btn.style.background='var(--card)';btn.style.color='var(--text)';btn.style.borderColor='var(--border)'; }
+  }
+}
+
+function ohSeancesValiderSerie() {
+  var isCardio = (_ohSeancesZoneActive === 'cardio');
+  if (!_ohSeancesExoActif) return;
+  if (isCardio) {
+    var duree = (document.getElementById('saisie-duree') || {value:''}).value;
+    var dist  = (document.getElementById('saisie-dist')  || {value:''}).value;
+    ohSeancesAjouterSerie(_ohSeancesExoActif.id, _ohSeancesExoActif.nom, _ohSeancesZoneActive, null, null, _ohSeancesRPE, true, duree, dist);
+  } else {
+    var charge = (document.getElementById('saisie-charge') || {value:''}).value;
+    var reps   = (document.getElementById('saisie-reps')   || {value:''}).value;
+    if (!reps) { if (typeof ohToast === 'function') ohToast('Renseignez au moins les répétitions'); return; }
+    ohSeancesAjouterSerie(_ohSeancesExoActif.id, _ohSeancesExoActif.nom, _ohSeancesZoneActive, charge, reps, _ohSeancesRPE, false);
+  }
+  _ohSeancesVue = 'exos';
+  ohSeancesRender();
+  if (typeof ohToast === 'function') ohToast('Série enregistrée ✓');
+}
+
+function ohSeancesConfirmerCloturer() {
+  if (confirm('Clôturer la séance du jour ? Elle ne sera plus modifiable.')) {
+    ohSeancesCloturer();
+    _ohSeancesVue = 'accueil';
+    ohSeancesRender();
+    if (typeof ohToast === 'function') ohToast('Séance clôturée 🎉');
+  }
+}
+
+function ohSeancesAfficherHistorique() {
+  var c = document.getElementById('seances-content');
+  if (!c) return;
+  var d = ohSeancesGetData();
+  var seances = d.seances.slice().reverse();
+  if (seances.length > 20) seances = seances.slice(0, 20);
+
+  var h = '<div style="padding:1rem">';
+  h += '<div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:1rem">';
+  h += '<button onclick="_ohSeancesVue=\'accueil\';ohSeancesRender()" type="button" style="background:none;border:none;cursor:pointer;font-size:1.3rem;padding:0">‹</button>';
+  h += '<h2 style="font-size:1.1rem;font-weight:800;margin:0">Historique</h2>';
+  h += '</div>';
+  if (seances.length === 0) h += '<p style="color:var(--muted);font-size:0.85rem">Aucune séance enregistrée.</p>';
+  for (var i = 0; i < seances.length; i++) {
+    var s = seances[i];
+    var nb = s.series ? s.series.length : 0;
+    var status = s.cloturee ? '✓' : '⏳';
+    h += '<div style="background:var(--card);border-radius:10px;padding:0.75rem;margin-bottom:0.5rem">';
+    h += '<div style="display:flex;justify-content:space-between;align-items:center">';
+    h += '<div><span style="font-weight:700;font-size:0.9rem">' + ohEsc(s.date || '—') + '</span>';
+    h += '<span style="font-size:0.78rem;color:var(--muted);margin-left:0.5rem">' + status + (s.cloturee ? ' Clôturée' : ' En cours') + '</span></div>';
+    h += '<span style="font-size:0.82rem;color:var(--muted)">' + nb + ' série' + (nb !== 1 ? 's' : '') + '</span>';
+    h += '</div>';
+    if (nb > 0) {
+      var byZone = {};
+      for (var j = 0; j < s.series.length; j++) { var z = s.series[j].zone; byZone[z] = (byZone[z] || 0) + 1; }
+      var parts = [];
+      Object.keys(byZone).forEach(function(z) {
+        var lab = OH_SEANCES_CATALOGUE[z] ? OH_SEANCES_CATALOGUE[z].label : z;
+        parts.push(byZone[z] + ' ' + lab);
+      });
+      h += '<div style="font-size:0.78rem;color:var(--muted);margin-top:0.3rem">' + parts.join(' · ') + '</div>';
+    }
+    h += '</div>';
+  }
+  h += '</div>';
+  c.innerHTML = h;
 }
 
 </script>
@@ -5630,6 +7551,157 @@ function pdcLogSave() {
 #pdc-team-tbl input, #pdc-team-tbl select { min-height: 38px; font-size: 0.85rem; }
 #pdc-team-tbl td, #pdc-team-tbl th { text-align: left; vertical-align: middle; }
 #pdc-team-tbl td.pdc-pts { text-align: right; font-weight: 800; }
+
+/* ══ MODULE MUSCULATION ══ */
+.app-nav .nav-item { min-width: 0; }
+.app-nav .nav-item span { white-space: nowrap; }
+@media (max-width: 359px) { .app-nav .nav-item { font-size: 0.54rem; padding-left: 0.1rem; padding-right: 0.1rem; } }
+.mus-wrap { padding: 0 0 2rem; }
+.mus-tabs { display: flex; gap: 5px; background: var(--white); border: 1px solid var(--border); border-radius: 12px; padding: 4px; margin-bottom: 14px; }
+.mus-tab { flex: 1; min-height: 44px; border: 0; border-radius: 9px; background: transparent; color: var(--muted); font: 600 0.85rem var(--font); cursor: pointer; }
+.mus-tab.active { background: var(--green); color: #fff; }
+.mus-card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 14px; margin-bottom: 12px; box-shadow: var(--shadow-sm); }
+.mus-card-title { font-size: 0.7rem; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 10px; }
+.mus-hero-title { font-size: 1.25rem; font-weight: 800; color: var(--text); letter-spacing: -0.02em; }
+.mus-note { font-size: 0.82rem; color: var(--text2); margin: 4px 0 12px; line-height: 1.45; }
+.mus-btn { display: block; width: 100%; min-height: 48px; border-radius: 12px; font: 700 0.95rem var(--font); cursor: pointer; margin-top: 8px; padding: 0 14px; }
+.mus-btn-main { background: var(--green); color: #fff; border: 0; box-shadow: 0 4px 12px rgba(0,200,150,0.3); }
+.mus-btn-sec { background: var(--bg); color: var(--text); border: 1.5px solid var(--border); }
+.mus-btn-ghost { background: transparent; color: var(--muted); border: 0; font-weight: 600; font-size: 0.85rem; }
+.mus-link { min-height: 44px; padding: 0 8px; background: none; border: 0; color: var(--green); font: 700 0.85rem var(--font); cursor: pointer; }
+.mus-link-muted { color: var(--muted); }
+.mus-stats { display: flex; gap: 8px; }
+.mus-stats > div { flex: 1; min-width: 0; text-align: center; background: var(--bg); border-radius: 10px; padding: 10px 4px; }
+.mus-stat-val { font-size: 1.25rem; font-weight: 800; color: var(--text); font-variant-numeric: tabular-nums; }
+.mus-stat-lbl { font-size: 0.68rem; color: var(--muted); font-weight: 600; }
+.mus-row { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 52px; padding: 8px 0; background: none; border: 0; border-bottom: 1px solid var(--border); text-align: left; cursor: pointer; color: var(--text); font-family: var(--font); }
+.mus-row:last-child { border-bottom: 0; }
+.mus-row-main { flex: 1; min-width: 0; }
+.mus-row-title { font-size: 0.92rem; font-weight: 700; color: var(--text); }
+.mus-row-sub { font-size: 0.75rem; font-weight: 500; color: var(--muted); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mus-chev { color: var(--muted); font-size: 1.3rem; flex: 0 0 auto; }
+.mus-list { padding: 4px 14px; }
+.mus-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; flex: 0 0 auto; }
+.mus-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 4px; }
+.mus-chip { min-height: 44px; padding: 0 12px; border-radius: 99px; border: 1.5px solid var(--border); background: var(--bg); color: var(--text2); font: 600 0.8rem var(--font); cursor: pointer; }
+.mus-chip.active { background: var(--text); color: var(--white); border-color: var(--text); }
+.mus-empty { text-align: center; color: var(--muted); font-size: 0.88rem; padding: 2rem 1rem; line-height: 1.5; }
+.mus-banner { display: flex; align-items: center; justify-content: space-between; gap: 8px; background: var(--green-light); color: #06694f; border-radius: 12px; padding: 4px 6px 4px 14px; margin-bottom: 12px; font-size: 0.88rem; }
+.mus-flash { background: var(--green-light); color: #06694f; border-radius: 12px; padding: 12px 14px; margin-bottom: 12px; font-weight: 700; font-size: 0.9rem; }
+.mus-search { width: 100%; min-height: 46px; border: 1.5px solid var(--border); border-radius: 12px; background: var(--card); color: var(--text); font: 500 16px var(--font); padding: 0 12px; margin-bottom: 10px; }
+.mus-search:focus, .mus-input:focus { border-color: var(--green); outline: none; }
+.mus-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.mus-group { position: relative; overflow: hidden; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; min-height: 68px; padding: 10px 12px 10px 18px; background: var(--card); border: 1px solid var(--border); border-radius: 14px; cursor: pointer; text-align: left; font-family: var(--font); box-shadow: var(--shadow-sm); }
+.mus-group-bar { position: absolute; left: 0; top: 0; bottom: 0; width: 6px; }
+.mus-group-name { font-size: 0.95rem; font-weight: 800; color: var(--text); }
+.mus-group-n { font-size: 0.72rem; color: var(--muted); font-weight: 600; margin-top: 2px; }
+.mus-lib-head { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; color: var(--text); }
+.mus-exo-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.mus-exo-name { font-size: 1rem; font-weight: 800; color: var(--text); min-width: 0; }
+.mus-last { font-size: 0.78rem; color: var(--text2); background: var(--bg); border-radius: 8px; padding: 7px 10px; margin-bottom: 8px; }
+.mus-sug { display: block; width: 100%; min-height: 40px; text-align: left; font: 700 0.8rem var(--font); color: #06694f; background: var(--green-light); border: 0; border-radius: 8px; padding: 0 10px; margin-bottom: 10px; cursor: pointer; }
+.mus-set-head, .mus-set { display: grid; grid-template-columns: 22px 1fr 1fr 46px; gap: 6px; align-items: center; }
+.mus-set-head { font-size: 0.66rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; text-align: center; margin-bottom: 4px; }
+.mus-set { margin-bottom: 6px; }
+.mus-set-n { font-size: 0.8rem; font-weight: 800; color: var(--muted); text-align: center; }
+.mus-stepper { display: flex; align-items: stretch; min-width: 0; border: 1.5px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--bg); }
+.mus-step { flex: 0 0 34px; min-height: 44px; border: 0; background: transparent; color: var(--text2); font: 700 1.2rem var(--font); cursor: pointer; padding: 0; }
+.mus-step:active { background: var(--border); }
+.mus-input { flex: 1; min-width: 0; width: 100%; border: 0; border-radius: 0; background: transparent; color: var(--text); font: 700 16px var(--font); text-align: center; padding: 0; font-variant-numeric: tabular-nums; }
+.mus-check { width: 46px; min-height: 44px; border-radius: 10px; border: 1.5px solid var(--border); background: var(--bg); color: var(--muted); font: 800 1.1rem var(--font); cursor: pointer; }
+.mus-check.on { background: var(--green); border-color: var(--green); color: #fff; }
+.mus-set.done .mus-stepper { border-color: var(--green); background: var(--green-light); }
+.mus-set.done .mus-input, .mus-set.done .mus-step { color: #06694f; }
+.mus-exo-actions { display: flex; flex-wrap: wrap; justify-content: space-between; margin-top: 4px; }
+.mus-perf { display: flex; justify-content: space-between; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--border); font-size: 0.82rem; color: var(--text); }
+.mus-perf:last-child { border-bottom: 0; }
+.mus-perf > span:first-child { font-weight: 700; }
+.mus-perf > span:last-child { color: var(--text2); text-align: right; font-variant-numeric: tabular-nums; }
+@media (prefers-color-scheme: dark) {
+  .mus-banner, .mus-flash, .mus-sug { color: #7ff0cf; background: rgba(0,200,150,0.16); }
+  .mus-set.done .mus-stepper { background: rgba(0,200,150,0.16); }
+  .mus-set.done .mus-input, .mus-set.done .mus-step { color: #7ff0cf; }
+}
+/* Notification : invisible au repos (elle dépassait sur la barre du bas) et lisible en mode sombre */
+.toast { opacity: 0; color: var(--white); transition: transform 0.3s cubic-bezier(0.34,1.56,0.64,1), opacity 0.2s; }
+.toast.show { opacity: 1; }
+/* Objectif et compétition */
+.mus-obj-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.mus-obj { position: relative; min-height: 52px; padding: 6px 8px; border-radius: 12px; border: 1.5px solid var(--border); background: var(--bg); color: var(--text); font: 700 0.86rem var(--font); cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; }
+.mus-obj.active { background: var(--green); border-color: var(--green); color: #fff; }
+.mus-obj-rec { font-size: 0.62rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #06694f; background: var(--green-light); border-radius: 99px; padding: 1px 7px; }
+.mus-obj.active .mus-obj-rec { color: #06694f; background: #fff; }
+.mus-obj-detail { margin-top: 10px; font-size: 0.82rem; color: var(--text2); line-height: 1.45; }
+.mus-obj-facts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.mus-obj-facts span { background: var(--bg); border-radius: 8px; padding: 5px 9px; font-size: 0.76rem; color: var(--text2); }
+.mus-obj-facts strong { color: var(--text); }
+.mus-compet { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 12px; }
+.mus-compet-j { flex: 0 0 auto; max-width: 45%; background: var(--text); color: var(--white); border-radius: 10px; padding: 8px 10px; font-size: 0.86rem; font-weight: 800; text-align: center; font-variant-numeric: tabular-nums; }
+.mus-compet-form .mus-search { background: var(--bg); }
+@media (prefers-color-scheme: dark) { .mus-obj-rec { color: #7ff0cf; background: rgba(0,200,150,0.16); } }
+.mus-obj-line { display: flex; align-items: center; gap: 4px; margin-top: 10px; }
+.mus-compet { flex-direction: column; gap: 8px; }
+.mus-compet-j { max-width: none; white-space: nowrap; align-self: flex-start; }
+/* Sources scientifiques */
+.mus-obj-src { margin-top: 8px; font-size: 0.76rem; color: var(--text2); line-height: 1.45; }
+.mus-sources { margin-top: 4px; }
+.mus-source { display: block; min-height: 44px; padding: 9px 0; border-top: 1px solid var(--border); text-decoration: none; color: var(--text2); font-size: 0.78rem; line-height: 1.4; }
+.mus-source strong { display: block; color: var(--green); font-size: 0.82rem; }
+/* Programme type */
+.mus-max { display: block; margin-bottom: 4px; }
+.mus-max span { display: block; font-size: 0.75rem; font-weight: 700; color: var(--muted); margin-bottom: 5px; }
+.mus-max .mus-search { background: var(--bg); margin-bottom: 4px; }
+.mus-prog { border-top: 1px solid var(--border); padding: 12px 0 4px; margin-top: 8px; }
+.mus-prog .mus-perf { font-size: 0.8rem; padding: 7px 0; }
+/* Interface allégée */
+.mus-btn-big { min-height: 60px; font-size: 1.05rem; margin-top: 0; }
+.mus-nav { min-height: 56px; }
+.mus-nav-lbl { font-size: 0.92rem; font-weight: 700; color: var(--text); flex: 0 0 auto; }
+.mus-nav-val { flex: 1; min-width: 0; text-align: right; font-size: 0.88rem; font-weight: 600; color: var(--green); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mus-more { flex: 0 0 44px; margin-left: auto; min-height: 44px; border: 0; background: none; color: var(--muted); font: 800 1.4rem var(--font); cursor: pointer; border-radius: 10px; }
+.mus-exo-name { flex: 1; }
+.mus-exo-actions { justify-content: flex-start; gap: 6px; background: var(--bg); border-radius: 10px; margin: 0 0 10px; padding: 0 4px; }
+.mus-compet { flex-direction: row; align-items: center; gap: 12px; }
+.mus-compet-j { align-self: auto; }
+.mus-obj-facts { margin-top: 12px; }
+.mus-sug { min-height: 44px; }
+@media (max-width: 359px) {
+  .mus-exo { padding: 10px; }
+  .mus-step { flex-basis: 28px; }
+  .mus-set-head, .mus-set { grid-template-columns: 16px 1fr 1fr 44px; gap: 4px; }
+}
+/* Sport : carte Aujourd'hui et trophées */
+.sp-today { font-size: 0.9rem; color: var(--text2); margin: 2px 0 10px; }
+.sp-today strong { color: var(--text); }
+.sp-week { display: flex; gap: 6px; margin-bottom: 10px; }
+.sp-day { flex: 1; height: 34px; border-radius: 10px; background: var(--bg); color: var(--muted); font-size: 0.72rem; font-weight: 800; display: flex; align-items: center; justify-content: center; }
+.sp-day.on { background: var(--green); color: #fff; }
+.sp-day.today { box-shadow: inset 0 0 0 2px var(--text); }
+.sp-troph { font-size: 1.3rem; line-height: 1.6; letter-spacing: 2px; }
+.sp-next { font-size: 0.76rem; letter-spacing: 0; color: var(--text2); margin-top: 4px; }
+.sp-next strong { color: var(--text); }
+.sp-bar { height: 6px; border-radius: 99px; background: var(--bg); margin-top: 5px; overflow: hidden; }
+.sp-bar i { display: block; height: 100%; background: var(--green); border-radius: 99px; }
+.sp-btn { display: block; width: 100%; min-height: 46px; margin-top: 12px; border: 0; border-radius: 12px; background: var(--green); color: #fff; font: 700 0.92rem var(--font); cursor: pointer; }
+.sp-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 10px; }
+.sp-award { background: var(--bg); border-radius: 12px; padding: 10px 4px; text-align: center; opacity: 0.55; }
+.sp-award.ok { opacity: 1; background: var(--green-light); }
+.sp-award-ico { font-size: 1.5rem; filter: grayscale(1); }
+.sp-award.ok .sp-award-ico { filter: none; }
+.sp-award-nom { font-size: 0.68rem; font-weight: 700; color: var(--text); line-height: 1.25; margin-top: 2px; }
+.sp-award-val { font-size: 0.64rem; color: var(--muted); font-weight: 600; margin-top: 2px; font-variant-numeric: tabular-nums; }
+.sp-award.ok .sp-award-nom { color: #06694f; }
+.sp-award.ok .sp-award-val { color: #06694f; }
+.mus-flash-award { margin-top: 6px; font-weight: 800; }
+/* Recherche d'aliments en ligne */
+.of-btn { display: block; width: 100%; min-height: 46px; margin: 10px 0 4px; border: 1.5px dashed #c9d1dc; border-radius: 14px; background: #fff; color: #1a1d2e; font: 700 0.84rem var(--font); cursor: pointer; padding: 6px 10px; }
+.of-note { text-align: center; font-size: 0.72rem; color: #9098b1; padding: 8px 4px; }
+.of-title { font-size: 0.72rem; font-weight: 800; color: #9098b1; text-transform: uppercase; letter-spacing: 0.06em; margin: 12px 2px 6px; }
+@media (prefers-color-scheme: dark) {
+  .sp-award.ok { background: rgba(0,200,150,0.16); }
+  .sp-award.ok .sp-award-nom, .sp-award.ok .sp-award-val { color: #7ff0cf; }
+}
+
 </style>
 
 <!-- Journal alimentaire (injecté par JS) -->
