@@ -5867,14 +5867,14 @@ function musViewHome() {
     return '<div class="mus-lib-head"><button type="button" class="mus-link" data-a="panel" data-v="">‹ Retour</button></div>'
       + (_mus.panel === 'obj' ? musObjCard() : _mus.panel === 'compet' ? musCompetCard() : musProgCard());
   }
-  var ss = musSortedSessions(), w = musWeekStats(), o = musObj(), c = musLoadCompet(), days = c.date ? musDaysTo(c.date) : NaN, pp = musProgPhase(), h = '';
+  var ss = musSortedSessions(), w = ohSportWeek(), o = musObj(), c = musLoadCompet(), days = c.date ? musDaysTo(c.date) : NaN, pp = musProgPhase(), h = '';
   h += '<button type="button" class="mus-btn mus-btn-main mus-btn-big" data-a="start">Démarrer une séance</button>';
   if (ss.length) h += '<button type="button" class="mus-btn mus-btn-sec" data-a="redo" data-v="' + musEsc(ss[0].id) + '">Refaire la dernière séance</button>';
   h += '<div class="mus-card mus-list" style="margin-top:14px">'
     + musNavRow('obj', 'Objectif', o ? o.nom : 'À choisir')
     + musNavRow('compet', 'Compétition', isFinite(days) ? (days < 0 ? 'Passée' : days === 0 ? 'Aujourd\'hui' : 'J-' + days) : 'Ajouter')
     + musNavRow('prog', 'Programme', MUS_PROG[pp.id].nom) + '</div>';
-  h += '<div class="mus-card"><div class="mus-card-title">Cette semaine</div><div class="mus-stats">'
+  h += '<div class="mus-card"><div class="mus-card-title">Cette semaine</div><div class="mus-row-sub" style="margin:-4px 0 8px">' + ohSportWeekLabel(w) + ' · Muscu et Para DC</div><div class="mus-stats">'
     + '<div><div class="mus-stat-val">' + w.n + '</div><div class="mus-stat-lbl">séance' + (w.n > 1 ? 's' : '') + '</div></div>'
     + '<div><div class="mus-stat-val">' + musFmt(w.volume) + '</div><div class="mus-stat-lbl">kg soulevés</div></div>'
     + '<div><div class="mus-stat-val">' + musFmt(w.kcal) + '</div><div class="mus-stat-lbl">kcal dépensées</div></div></div></div>';
@@ -6243,6 +6243,22 @@ function musMonday(key) {
   return musDateKey(new Date(d.getFullYear(), d.getMonth(), d.getDate() - dow));
 }
 function musAddDays(key, n) { var p = key.split('-'); return musDateKey(new Date(+p[0], +p[1]-1, +p[2] + n)); }
+// A-03 : source unique du nombre de séances (Muscu + Para DC), semaine du lundi au dimanche
+function ohSportWeek(refKey) {
+  var today = refKey || musDateKey(), lundi = musMonday(today), dimanche = musAddDays(lundi, 6), ev = musSportEvents();
+  var r = { lundi: lundi, dimanche: dimanche, n: 0, jours: {}, minutes: 0, kcal: 0, volume: 0 };
+  for (var i = 0; i < ev.length; i++) if (ev[i].date >= lundi && ev[i].date <= dimanche) {
+    r.n++; r.jours[ev[i].date] = 1; r.minutes += ev[i].minutes; r.kcal += ev[i].kcal; r.volume += ev[i].volume;
+  }
+  r.minutes = Math.round(r.minutes); r.kcal = Math.round(r.kcal); r.volume = Math.round(r.volume);
+  return r;
+}
+function ohSportWeekLabel(w) {
+  var M = ['janv.','févr.','mars','avr.','mai','juin','juil.','août','sept.','oct.','nov.','déc.'];
+  var a = w.lundi.split('-'), b = w.dimanche.split('-');
+  return 'du lundi ' + (+a[2]) + (a[1] !== b[1] ? ' ' + M[+a[1]-1] : '') + ' au dimanche ' + (+b[2]) + ' ' + M[+b[1]-1];
+}
+function ohSeancesTxt(n) { return n + ' séance' + (n > 1 ? 's' : ''); }
 function musSportStats() {
   var ev = musSportEvents(), st = { total: ev.length, volume: 0, maxWeek: 0, run: 0, prs: 0, prog: 0 }, weeks = {}, i;
   for (i = 0; i < ev.length; i++) { st.volume += ev[i].volume; if (ev[i].prog) st.prog++; var m = musMonday(ev[i].date); weeks[m] = (weeks[m] || 0) + 1; }
@@ -6279,7 +6295,7 @@ var MUS_AWARDS = [
 ];
 function musAwards() {
   var st = musSportStats();
-  return MUS_AWARDS.map(function(a){ var v = st[a[3]] || 0; return { id: a[0], ico: a[1], nom: a[2], val: Math.min(v, a[4]), cible: a[4], ok: v >= a[4] }; });
+  return MUS_AWARDS.map(function(a){ var v = st[a[3]] || 0; return { id: a[0], ico: a[1], nom: a[2], type: a[3], val: Math.min(v, a[4]), cible: a[4], ok: v >= a[4] }; });
 }
 // Enregistre les trophées nouvellement acquis et les renvoie
 function musAwardsSync() {
@@ -6294,16 +6310,19 @@ function musNextAward(list) {
   for (var i = 0; i < list.length; i++) if (!list[i].ok && (!best || list[i].val / list[i].cible > best.val / best.cible)) best = list[i];
   return best;
 }
-function musFmtCible(a) { return a.cible >= 1000 ? musFmt(a.val / 1000) + ' / ' + musFmt(a.cible / 1000) + ' t' : a.val + ' / ' + a.cible; }
+var MUS_AWARD_PERIODE = { total: 'depuis le début', volume: 'depuis le début', prs: 'depuis le début', prog: 'depuis le début', maxWeek: 'meilleure semaine', run: 'semaines d\'affilée' };
+function musFmtCible(a) {
+  var t = a.cible >= 1000 ? musFmt(a.val / 1000) + ' / ' + musFmt(a.cible / 1000) + ' t' : a.val + ' / ' + a.cible;
+  var per = MUS_AWARD_PERIODE[a.type]; return per ? t + ' · ' + per : t;
+}
 
 // Carte « Sport » de la page Aujourd'hui
 function ohSportTodayCard() {
   try {
-    var today = musDateKey(), d = ohSportDay(today), lundi = musMonday(today), ev = musSportEvents(), jours = {}, nSem = 0, i;
-    for (i = 0; i < ev.length; i++) if (ev[i].date >= lundi && ev[i].date <= musAddDays(lundi, 6)) { jours[ev[i].date] = 1; nSem++; }
+    var today = musDateKey(), d = ohSportDay(today), wk = ohSportWeek(today), lundi = wk.lundi, jours = wk.jours, nSem = wk.n, i;
     var list = musAwards(), acquis = list.filter(function(a){ return a.ok; }), next = musNextAward(list), L = ['L','M','M','J','V','S','D'];
     var h = '<div class="oh-today-card sp-card"><div class="oh-tc-header"><span class="oh-tc-icon">&#127947;&#65039;</span><span class="oh-tc-title">Sport</span>'
-      + '<span class="oh-tc-badge" style="background:var(--green)">' + nSem + ' cette semaine</span></div>';
+      + '<span class="oh-tc-badge" style="background:var(--green)" title="Muscu et Para DC, ' + ohSportWeekLabel(wk) + '">' + ohSeancesTxt(nSem) + ' cette semaine</span></div>';
     h += '<div class="sp-today">' + (d.seances
       ? '<strong>' + d.seances + ' séance' + (d.seances > 1 ? 's' : '') + '</strong> · ' + d.minutes + ' min · <strong>' + d.kcal + ' kcal</strong>'
       : 'Pas encore de séance aujourd\'hui') + '</div><div class="sp-week">';
