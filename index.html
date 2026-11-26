@@ -5149,7 +5149,10 @@ function pdcBindAll() {
         if(team) team.style.display=_pdcState.pdMode==='team'?'':'none';
         if(_pdcState.pdMode!=='team'&&v) v.value=_pdcState.pdStore[_pdcState.pdMode];
         var lbl=document.getElementById('pdc-pd-val-lbl');
-        if(lbl) lbl.textContent=_pdcState.pdMode==='score'?'Barre (kg)':'Score visé (pts)';
+        var _swP={};try{_swP=JSON.parse(localStorage.getItem('oh_profile')||'{}')||{};}catch(e){}
+        var _swHas=_pdcState.pdMode==='score'&&_swP.barreMax>0;
+        if(lbl) lbl.innerHTML=_pdcState.pdMode==='score'?('Barre (kg)'+(_swHas?'<span style="font-size:0.72rem;color:#00c896;font-weight:600;margin-left:6px">🔗 issu du profil</span>':'')):'Score visé (pts)';
+        if(v){v.style.background=_swHas?'#f0fdf8':'';v.style.borderColor=_swHas?'#00c896':'';}
         pdcRenderDotsCalc();
       });
     })(segBtns[i]);
